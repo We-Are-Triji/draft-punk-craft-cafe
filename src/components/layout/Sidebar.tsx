@@ -4,13 +4,13 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  Coffee,
   CameraIcon,
   Receipt,
   HandPlatter,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/draft-punk-craft-cafe-logo.webp";
 
 export type Tab = "scan" | "dashboard" | "inventory" | "transactions" | "recipes";
 
@@ -39,11 +39,9 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border">
-        <img
-          src={logo}
-          alt="Draft Punk"
-          className="w-9 h-9 rounded-xl object-cover shrink-0"
-        />
+        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-800 text-white shrink-0">
+          <Coffee className="w-4 h-4" />
+        </div>
         {!collapsed && (
           <div className="flex flex-col">
             <span className="font-bold text-foreground text-sm leading-tight">
