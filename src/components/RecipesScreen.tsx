@@ -45,6 +45,9 @@ const INITIAL_NEW_PRODUCT: NewProductForm = {
   properties: '{}',
 };
 
+const SKELETON_PRODUCTS_COUNT = 6;
+const SKELETON_INGREDIENT_ROWS = 6;
+
 function formatQuantity(value: number): string {
   if (Number.isInteger(value)) {
     return String(value);
@@ -479,7 +482,20 @@ export const RecipesScreen = () => {
 
         <div className="flex-1 overflow-auto">
           {loading && (
-            <p className="p-6 text-sm text-gray-400 font-semibold">Loading products...</p>
+            <div className="p-4 space-y-2">
+              {Array.from({ length: SKELETON_PRODUCTS_COUNT }).map((_, index) => (
+                <div key={`product-skeleton-${index}`} className="p-5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-gray-200 animate-pulse" />
+                    <div className="space-y-2">
+                      <div className="h-3 w-40 rounded bg-gray-200 animate-pulse" />
+                      <div className="h-2 w-20 rounded bg-gray-100 animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="w-4 h-4 rounded bg-gray-100 animate-pulse" />
+                </div>
+              ))}
+            </div>
           )}
 
           {!loading && filteredProducts.length === 0 && (
@@ -532,6 +548,47 @@ export const RecipesScreen = () => {
       </div>
 
       <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+        {loading && (
+          <>
+            <div className="p-8 border-b border-gray-50 bg-gray-50/20">
+              <div className="h-10 w-80 max-w-full rounded-xl bg-gray-200 animate-pulse" />
+              <div className="h-3 w-64 max-w-full rounded mt-3 bg-gray-100 animate-pulse" />
+
+              <div className="flex flex-wrap gap-3 mt-7">
+                <div className="h-12 w-40 rounded-2xl bg-gray-200 animate-pulse" />
+                <div className="h-12 w-40 rounded-2xl bg-gray-100 animate-pulse" />
+              </div>
+            </div>
+
+            <div className="p-8 flex-1 overflow-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[10px] font-bold text-gray-300 uppercase tracking-widest border-b border-gray-100">
+                    <th className="pb-4 px-2">Ingredient Name</th>
+                    <th className="pb-4 px-2 w-36">Qty</th>
+                    <th className="pb-4 px-2 w-32">Unit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {Array.from({ length: SKELETON_INGREDIENT_ROWS }).map((_, index) => (
+                    <tr key={`ingredient-skeleton-${index}`}>
+                      <td className="py-5 px-2">
+                        <div className="h-4 w-48 max-w-full rounded bg-gray-200 animate-pulse" />
+                      </td>
+                      <td className="py-5 px-2">
+                        <div className="h-8 w-20 rounded-xl bg-gray-200 animate-pulse" />
+                      </td>
+                      <td className="py-5 px-2">
+                        <div className="h-4 w-14 rounded bg-gray-100 animate-pulse" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
         {!selectedProduct && !loading && (
           <div className="p-8 h-full flex flex-col items-center justify-center text-center">
             <h3 className="text-xl font-black text-gray-800">No Product Selected</h3>
@@ -548,7 +605,7 @@ export const RecipesScreen = () => {
           </div>
         )}
 
-        {selectedProduct && (
+        {!loading && selectedProduct && (
           <>
             <div className="p-8 border-b border-gray-50 bg-gray-50/20 space-y-4">
               {selectedForView ? (
