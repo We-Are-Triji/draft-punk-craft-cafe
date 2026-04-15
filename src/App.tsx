@@ -3,6 +3,7 @@ import { Sidebar, type Tab } from "@/components/layout/Sidebar";
 import { ScanScreen } from "@/components/ScanScreen";
 import { DashboardScreen } from "@/components/DashboardScreen";
 import { LoginScreen } from "@/components/LoginScreen";
+import { InventoryScreen } from "@/components/InventoryScreen";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 function App() {
@@ -57,6 +58,7 @@ function App() {
       <main className="flex-1 p-6 overflow-auto">
         {activeTab === "scan" && <ScanScreen />}
         {activeTab === "dashboard" && <DashboardScreen />}
+        {activeTab === "inventory" && <InventoryScreen />}
       </main>
     </div>
   );
