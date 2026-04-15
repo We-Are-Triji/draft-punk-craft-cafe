@@ -111,6 +111,7 @@ export const RecipesScreen = () => {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'food' | 'drink'>('all');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProductDraft | null>(null);
@@ -135,10 +136,12 @@ export const RecipesScreen = () => {
 
   const filteredProducts = useMemo(
     () =>
-      products.filter((product) =>
-        product.name.toLowerCase().includes(searchTerm.toLowerCase())
-      ),
-    [products, searchTerm]
+      products.filter((product) => {
+        const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesFilter = activeFilter === 'all' || product.category.toLowerCase().includes(activeFilter);
+        return matchesSearch && matchesFilter;
+      }),
+    [products, searchTerm, activeFilter]
   );
 
   const selectedProduct = useMemo(
@@ -468,15 +471,33 @@ export const RecipesScreen = () => {
             </button>
           </div>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
-            <input
-              type="text"
-              placeholder={`Search ${products.length} items...`}
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-1 focus:ring-[#3E2723] outline-none"
-            />
+          <div className="flex flex-col gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+              <input
+                type="text"
+                placeholder={`Search ${products.length} items...`}
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-1 focus:ring-[#3E2723] outline-none"
+              />
+            </div>
+
+            <div className="flex gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
+              {(['all', 'food', 'drink'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setActiveFilter(filter)}
+                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                    activeFilter === filter
+                      ? 'bg-white text-[#3E2723] shadow-sm'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -551,8 +572,8 @@ export const RecipesScreen = () => {
         {loading && (
           <>
             <div className="p-8 border-b border-gray-50 bg-gray-50/20">
-              <div className="h-10 w-80 max-w-full rounded-xl bg-gray-200 animate-pulse" />
-              <div className="h-3 w-64 max-w-full rounded mt-3 bg-gray-100 animate-pulse" />
+              <div className="h-10 w-80 max-full rounded-xl bg-gray-200 animate-pulse" />
+              <div className="h-3 w-64 max-full rounded mt-3 bg-gray-100 animate-pulse" />
 
               <div className="flex flex-wrap gap-3 mt-7">
                 <div className="h-12 w-40 rounded-2xl bg-gray-200 animate-pulse" />
@@ -573,7 +594,7 @@ export const RecipesScreen = () => {
                   {Array.from({ length: SKELETON_INGREDIENT_ROWS }).map((_, index) => (
                     <tr key={`ingredient-skeleton-${index}`}>
                       <td className="py-5 px-2">
-                        <div className="h-4 w-48 max-w-full rounded bg-gray-200 animate-pulse" />
+                        <div className="h-4 w-48 max-full rounded bg-gray-200 animate-pulse" />
                       </td>
                       <td className="py-5 px-2">
                         <div className="h-8 w-20 rounded-xl bg-gray-200 animate-pulse" />
@@ -773,7 +794,7 @@ export const RecipesScreen = () => {
                           </span>
                         )}
                       </td>
-                      <td className="py-5 px-2 text-gray-400 font-bold uppercase text-[10px] tracking-widest">
+                      <td className="py-5 px-2">
                         {isEditing && selectedForView ? (
                           <input
                             type="text"
@@ -788,7 +809,9 @@ export const RecipesScreen = () => {
                             className="w-24 p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold text-center uppercase outline-none focus:ring-1 focus:ring-[#3E2723]"
                           />
                         ) : (
-                          ingredient.unit
+                          <span className="inline-flex items-center text-[#3E2723] font-black uppercase text-[10px] tracking-widest">
+                            {ingredient.unit}
+                          </span>
                         )}
                       </td>
                       {isEditing && selectedForView && (

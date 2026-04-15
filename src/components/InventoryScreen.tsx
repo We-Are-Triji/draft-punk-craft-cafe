@@ -14,7 +14,7 @@ export const InventoryScreen = () => {
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false); // NEW: Delete Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false); 
   
   const [selectedItem, setSelectedItem] = useState<{id: number, name: string, stock?: number} | null>(null);
   const [newStockInput, setNewStockInput] = useState("");
@@ -26,7 +26,6 @@ export const InventoryScreen = () => {
     return { label: 'HEALTHY', color: 'bg-emerald-100 text-emerald-600' };
   };
 
-  // Filter & Sort Logic
   const getProcessedIngredients = () => {
     let list = [...ingredients];
     list = list.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -40,7 +39,6 @@ export const InventoryScreen = () => {
 
   const filteredIngredients = getProcessedIngredients();
 
-  // NEW: Delete Logic
   const confirmDelete = () => {
     if (selectedItem) {
       setIngredients(ingredients.filter(item => item.id !== selectedItem.id));
@@ -98,7 +96,7 @@ export const InventoryScreen = () => {
         </div>
       )}
 
-      {/* NEW MODAL: DELETE CONFIRMATION */}
+      {/* MODAL: DELETE CONFIRMATION */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl text-center">
@@ -115,7 +113,7 @@ export const InventoryScreen = () => {
         </div>
       )}
 
-      {/* TOP SECTION (KEEPING AS REQUESTED) */}
+      {/* TOP SECTION */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
@@ -124,9 +122,13 @@ export const InventoryScreen = () => {
           </div>
           <div className="space-y-2">
             {ingredients.filter(i => i.stock <= 3).map(i => (
-              <div key={i.id} className="flex justify-between items-center bg-gray-50/50 p-3 rounded-xl">
-                <span className="text-sm font-semibold text-gray-700">{i.name}</span>
-                <span className="text-sm font-bold text-red-500">{i.stock} {i.unit || 'kg'}</span>
+              /* Faint red background added here */
+              <div key={i.id} className="flex justify-between items-center bg-red-50 p-4 rounded-2xl border border-red-100/50">
+                <span className="text-sm font-bold text-gray-700">{i.name}</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-lg font-black text-red-600">{i.stock}</span>
+                  <span className="text-[#3E2723] font-black uppercase text-[10px] tracking-widest">{i.unit || 'kg'}</span>
+                </span>
               </div>
             ))}
           </div>
@@ -177,7 +179,12 @@ export const InventoryScreen = () => {
               return (
                 <tr key={item.id} className="group hover:bg-gray-50/50">
                   <td className="py-6 px-2 font-bold text-gray-800 text-lg tracking-tight">{item.name}</td>
-                  <td className="py-6 px-2 font-bold text-lg text-gray-700">{item.stock} <span className="text-gray-300 text-xs ml-1 font-medium">{item.unit || 'kg'}</span></td>
+                  <td className="py-6 px-2 font-bold text-lg text-gray-700">
+                    {item.stock} 
+                    <span className="text-[#3E2723] font-black uppercase text-[10px] tracking-widest ml-2">
+                      {item.unit || 'kg'}
+                    </span>
+                  </td>
                   <td className="py-6 px-2">
                     <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest ${status.color}`}>
                       {status.label}
@@ -188,7 +195,6 @@ export const InventoryScreen = () => {
                       <button onClick={() => { setSelectedItem(item); setNewStockInput(item.stock.toString()); setIsAdjustModalOpen(true); }} className="bg-gray-100 hover:bg-[#3E2723] hover:text-white text-gray-500 p-2.5 rounded-xl transition-all">
                         <Edit3 size={18} />
                       </button>
-                      {/* DELETE BUTTON */}
                       <button onClick={() => { setSelectedItem(item); setIsDeleteModalOpen(true); }} className="bg-gray-100 hover:bg-red-500 hover:text-white text-gray-500 p-2.5 rounded-xl transition-all">
                         <Trash2 size={18} />
                       </button>
