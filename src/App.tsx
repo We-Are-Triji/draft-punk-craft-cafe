@@ -5,6 +5,7 @@ import { DashboardScreen } from "@/components/DashboardScreen";
 import { LoginScreen } from "@/components/LoginScreen";
 import { InventoryScreen } from "@/components/InventoryScreen";
 import { RecipesScreen } from "@/components/RecipesScreen";
+import { TransactionsScreen } from "@/components/TransactionsScreen";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 function App() {
@@ -60,6 +61,7 @@ function App() {
         {activeTab === "scan" && <ScanScreen />}
         {activeTab === "dashboard" && <DashboardScreen />}
         {activeTab === "inventory" && <InventoryScreen />}
+        {activeTab === "transactions" && <TransactionsScreen />}
         {activeTab === "recipes" && <RecipesScreen />}
       </main>
     </div>
