@@ -1,48 +1,92 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, PackageCheck, CameraIcon, Bell } from "lucide-react";
 
-interface Notification {
-  id: string;
-  message: string;
-  details: string;
-  timestamp: string;
-}
-
-const notifications: Notification[] = [
+const notifications = [
   {
     id: "1",
-    message: "Critical level ingredients:",
-    details: "- Milk: 0.94 left",
-    timestamp: "May 25, 2025, 7:02 AM",
+    icon: AlertTriangle,
+    iconColor: "text-red-500",
+    iconBg: "bg-red-50 dark:bg-red-950/40",
+    title: "Milk critically low",
+    detail: "Only 0.94 L remaining",
+    time: "2m ago",
   },
   {
     id: "2",
-    message: "Critical level ingredients:",
-    details: "- Milk: 0.96 left",
-    timestamp: "May 25, 2025, 7:01 AM",
+    icon: CameraIcon,
+    iconColor: "text-blue-500",
+    iconBg: "bg-blue-50 dark:bg-blue-950/40",
+    title: "Latte scanned",
+    detail: "Ingredients deducted",
+    time: "15m ago",
   },
   {
     id: "3",
-    message: "Critical level ingredients:",
-    details: "- Milk: 0.98 left",
-    timestamp: "May 25, 2025, 6:46 AM",
+    icon: PackageCheck,
+    iconColor: "text-green-500",
+    iconBg: "bg-green-50 dark:bg-green-950/40",
+    title: "Stock received",
+    detail: "Coffee Beans +5 kg",
+    time: "1h ago",
+  },
+  {
+    id: "4",
+    icon: AlertTriangle,
+    iconColor: "text-amber-500",
+    iconBg: "bg-amber-50 dark:bg-amber-950/40",
+    title: "Vanilla Syrup low",
+    detail: "1.5 L remaining",
+    time: "2h ago",
+  },
+  {
+    id: "5",
+    icon: CameraIcon,
+    iconColor: "text-blue-500",
+    iconBg: "bg-blue-50 dark:bg-blue-950/40",
+    title: "Cappuccino scanned",
+    detail: "Ingredients deducted",
+    time: "3h ago",
   },
 ];
 
 export function NotificationsPanel() {
   return (
     <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="text-base font-semibold">Notifications</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
+            <Bell className="w-4 h-4 text-amber-700" />
+          </div>
+          <CardTitle className="text-sm font-semibold">Activity</CardTitle>
+        </div>
+        <Badge variant="secondary" className="text-[10px] h-5">
+          {notifications.length} new
+        </Badge>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-1">
         {notifications.map((n) => (
-          <div key={n.id} className="flex gap-2 text-sm">
-            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-foreground font-medium">{n.message}</p>
-              <p className="text-muted-foreground">{n.details}</p>
-              <p className="text-xs text-muted-foreground mt-1">{n.timestamp}</p>
+          <div
+            key={n.id}
+            className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-muted/50 transition-colors cursor-default"
+          >
+            <div
+              className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${n.iconBg}`}
+            >
+              <n.icon className={`w-3.5 h-3.5 ${n.iconColor}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-xs font-medium text-foreground truncate">
+                  {n.title}
+                </p>
+                <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                  {n.time}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {n.detail}
+              </p>
             </div>
           </div>
         ))}
