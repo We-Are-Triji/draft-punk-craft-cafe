@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Coffee, Eye, EyeOff } from "lucide-react";
 import heroImg from "@/assets/draft-punk-craft-cafe.jpg";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -11,6 +12,47 @@ interface LoginScreenProps {
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleEmailPasswordLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail || !password) {
+      setErrorMessage("Please enter both email and password.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
+
+      onLogin();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to login right now. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-amber-900/20 p-4">
@@ -38,7 +80,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             <Button
               variant="outline"
               className="w-full rounded-full py-5 font-medium"
-              onClick={onLogin}
+              disabled
+              title="Google login is intentionally disabled for this demo."
             >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                 <path
@@ -69,13 +112,16 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </div>
 
             {/* Form fields */}
-            <div className="flex flex-col gap-4">
+            <form className="flex flex-col gap-4" onSubmit={handleEmailPasswordLogin}>
               <div>
                 <label className="text-sm font-medium text-foreground mb-1.5 block">
                   Email
                 </label>
                 <Input
                   type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
                   placeholder="you@example.com"
                   className="rounded-lg py-5"
                 />
@@ -87,6 +133,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 <div className="relative">
                   <Input
                     type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
                     placeholder="••••••••"
                     className="rounded-lg py-5 pr-10"
                   />
@@ -122,13 +171,18 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 </a>
               </div>
 
+              {errorMessage ? (
+                <p className="text-sm text-destructive">{errorMessage}</p>
+              ) : null}
+
               <Button
+                type="submit"
                 className="w-full rounded-full py-5 bg-amber-800 hover:bg-amber-900 text-white font-medium mt-2"
-                onClick={onLogin}
+                disabled={isSubmitting}
               >
-                Login
+                {isSubmitting ? "Logging in..." : "Login"}
               </Button>
-            </div>
+            </form>
           </div>
         </div>
 
