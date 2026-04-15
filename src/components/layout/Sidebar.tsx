@@ -2,22 +2,31 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   Package,
-  Leaf,
-  FolderOpen,
   ChevronLeft,
   ChevronRight,
   Coffee,
+  CameraIcon,
+  Receipt,
+  HandPlatter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+export type Tab = "scan" | "dashboard" | "inventory" | "transactions" | "recipes";
+
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "#", active: true },
-  { icon: Package, label: "Products", href: "#" },
-  { icon: Leaf, label: "Ingredients", href: "#" },
-  { icon: FolderOpen, label: "Category", href: "#" },
+  { icon: CameraIcon, label: "Scan", tab: "scan" as const },
+  { icon: LayoutDashboard, label: "Dashboard", tab: "dashboard" as const },
+  { icon: Package, label: "Inventory", tab: "inventory" as const },
+  { icon: Receipt, label: "Transactions", tab: "transactions" as const },
+  { icon: HandPlatter, label: "Recipes", tab: "recipes" as const },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  activeTab: Tab;
+  onTabChange: (tab: Tab) => void;
+}
+
+export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -51,19 +60,19 @@ export function Sidebar() {
 
       <nav className="flex flex-col gap-1 p-2 flex-1">
         {navItems.map((item) => (
-          <a
-            key={item.label}
-            href={item.href}
+          <button
+            key={item.tab}
+            onClick={() => onTabChange(item.tab)}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-              item.active
+              activeTab === item.tab
                 ? "bg-accent text-accent-foreground font-medium"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             )}
           >
             <item.icon className="w-4 h-4 shrink-0" />
             {!collapsed && <span>{item.label}</span>}
-          </a>
+          </button>
         ))}
       </nav>
     </aside>
