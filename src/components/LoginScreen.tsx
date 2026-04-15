@@ -154,22 +154,14 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 </div>
               </div>
 
-              {/* Remember / Forgot */}
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="rounded border-border accent-amber-800"
-                  />
-                  <span className="text-muted-foreground">Remember Me</span>
-                </label>
-                <a
-                  href="#"
-                  className="text-amber-800 hover:underline font-medium"
-                >
-                  Forgot password?
-                </a>
-              </div>
+              {/* Remember Me */}
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  className="rounded border-border accent-amber-800"
+                />
+                <span className="text-muted-foreground">Remember Me</span>
+              </label>
 
               {errorMessage ? (
                 <p className="text-sm text-destructive">{errorMessage}</p>

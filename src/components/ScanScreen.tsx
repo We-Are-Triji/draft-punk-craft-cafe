@@ -56,8 +56,28 @@ export function ScanScreen() {
   }, [previewUrl]);
 
   const setImageFile = (imageFile: File) => {
-    if (!imageFile.type.startsWith("image/")) {
-      setErrorMessage("Please upload a valid image file.");
+    // Supported formats: jpg, jpeg, png, gif, webp, heic, heif
+    const supportedMimeTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/heic",
+      "image/heif",
+    ];
+    const supportedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"];
+
+    // Check by MIME type first, fallback to file extension
+    const isSupportedByMimeType = supportedMimeTypes.includes(imageFile.type);
+    const fileName = imageFile.name.toLowerCase();
+    const isSupportedByExtension = supportedExtensions.some((ext) =>
+      fileName.endsWith(ext)
+    );
+
+    if (!isSupportedByMimeType && !isSupportedByExtension) {
+      setErrorMessage(
+        "Please upload a valid image file (jpg, png, gif, webp, heic, heif)."
+      );
       return;
     }
 
@@ -174,7 +194,7 @@ export function ScanScreen() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
               className="hidden"
               onChange={(event) => {
                 const nextFile = event.currentTarget.files?.[0];
