@@ -4,12 +4,13 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
-  Coffee,
   CameraIcon,
   Receipt,
   HandPlatter,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logo from "@/assets/draft-punk-craft-cafe-logo.webp";
 
 export type Tab = "scan" | "dashboard" | "inventory" | "transactions" | "recipes";
 
@@ -36,38 +37,52 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         collapsed ? "w-16" : "w-56"
       )}
     >
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-800 text-white shrink-0">
-          <Coffee className="w-4 h-4" />
-        </div>
+      {/* Brand */}
+      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border">
+        <img
+          src={logo}
+          alt="Draft Punk"
+          className="w-9 h-9 rounded-xl object-cover shrink-0"
+        />
         {!collapsed && (
-          <span className="font-semibold text-foreground text-sm whitespace-nowrap">
-            Draft Punk
-          </span>
+          <div className="flex flex-col">
+            <span className="font-bold text-foreground text-sm leading-tight">
+              Draft Punk
+            </span>
+            <span className="text-[10px] text-muted-foreground leading-tight">
+              Craft Cafe
+            </span>
+          </div>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+          className="ml-auto w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3.5 h-3.5" />
           ) : (
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3.5 h-3.5" />
           )}
         </button>
       </div>
 
-      <nav className="flex flex-col gap-1 p-2 flex-1">
+      {/* Nav */}
+      <nav className="flex flex-col gap-0.5 p-2 flex-1">
+        {!collapsed && (
+          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-3 pt-2 pb-1">
+            Menu
+          </span>
+        )}
         {navItems.map((item) => (
           <button
             key={item.tab}
             onClick={() => onTabChange(item.tab)}
             className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
               activeTab === item.tab
-                ? "bg-accent text-accent-foreground font-medium"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                ? "bg-amber-800 text-white font-medium shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <item.icon className="w-4 h-4 shrink-0" />
@@ -75,6 +90,16 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </button>
         ))}
       </nav>
+
+      {/* Footer */}
+      <div className="p-2 border-t border-border">
+        <button
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-all w-full"
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Logout</span>}
+        </button>
+      </div>
     </aside>
   );
 }
