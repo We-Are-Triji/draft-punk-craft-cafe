@@ -11,9 +11,23 @@ function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
     const supabase = getSupabaseClient();
+
+    const extractUserInfo = (session: { user: { email?: string; user_metadata?: Record<string, unknown> } } | null) => {
+      if (!session) {
+        setUserName("");
+        setUserEmail("");
+        return;
+      }
+      setUserEmail(session.user.email ?? "");
+      const meta = session.user.user_metadata;
+      const name = (meta?.full_name ?? meta?.name ?? "") as string;
+      setUserName(name);
+    };
 
     const checkSession = async () => {
       const { data, error } = await supabase.auth.getSession();
@@ -23,6 +37,7 @@ function App() {
         setLoggedIn(false);
       } else {
         setLoggedIn(Boolean(data.session));
+        extractUserInfo(data.session);
       }
 
       setAuthReady(true);
@@ -34,6 +49,7 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setLoggedIn(Boolean(session));
+      extractUserInfo(session);
     });
 
     return () => {
@@ -53,9 +69,14 @@ function App() {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
   }
 
+  const handleLogout = async () => {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+  };
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} userName={userName} userEmail={userEmail} />
       <main className="flex-1 p-6 overflow-auto">
         {activeTab === "dashboard" && <DashboardScreen onNavigate={setActiveTab} />}
         {activeTab === "inventory" && <InventoryScreen />}
