@@ -69,7 +69,7 @@ export function TopDishesChart() {
                 padding: "8px 12px",
               }}
               cursor={{ fill: "rgba(0,0,0,0.03)" }}
-              formatter={(value: number) => [`${value} scans`, "Scans"]}
+              formatter={(value) => [`${value ?? 0} scans`, "Scans"]}
             />
             <Bar dataKey="scans" radius={[0, 8, 8, 0]} barSize={20} label={{
               position: "right",

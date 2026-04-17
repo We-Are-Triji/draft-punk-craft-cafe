@@ -9,6 +9,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import type {
   ConfirmDeductionResult,
   IngredientDeduction,
+  InventoryItemRow,
   ScanDetectionResult,
   TransactionType,
 } from "@/types/inventory";
@@ -76,6 +77,14 @@ interface InventoryLookup {
   current_stock: number;
 }
 
+export interface InventoryItemMutationInput {
+  name: string;
+  category: string;
+  unit: string;
+  current_stock: number;
+  reorder_threshold: number;
+}
+
 function normalizeDishName(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -88,6 +97,121 @@ function toNumber(value: unknown, fallbackValue = 0): number {
   }
 
   return parsed;
+}
+
+function mapInventoryItemRow(row: Record<string, unknown>): InventoryItemRow {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    category: String(row.category),
+    unit: String(row.unit),
+    current_stock: toNumber(row.current_stock, 0),
+    reorder_threshold: toNumber(row.reorder_threshold, 0),
+    created_at: String(row.created_at),
+  };
+}
+
+function normalizeInventoryMutationInput(
+  input: InventoryItemMutationInput
+): Record<string, unknown> {
+  const name = input.name.trim();
+
+  if (!name) {
+    throw new Error("Ingredient name is required.");
+  }
+
+  const unit = input.unit.trim();
+
+  if (!unit) {
+    throw new Error("Ingredient unit is required.");
+  }
+
+  const currentStock = toNumber(input.current_stock, 0);
+  const reorderThreshold = toNumber(input.reorder_threshold, 0);
+
+  if (currentStock < 0) {
+    throw new Error("Current stock cannot be negative.");
+  }
+
+  if (reorderThreshold < 0) {
+    throw new Error("Reorder threshold cannot be negative.");
+  }
+
+  return {
+    name,
+    category: input.category.trim() || "Uncategorized",
+    unit,
+    current_stock: currentStock,
+    reorder_threshold: reorderThreshold,
+  };
+}
+
+export async function createInventoryItem(
+  input: InventoryItemMutationInput
+): Promise<InventoryItemRow> {
+  const supabase = getSupabaseClient();
+  const payload = normalizeInventoryMutationInput(input);
+
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .insert(payload)
+    .select(
+      "id, name, category, unit, current_stock, reorder_threshold, created_at"
+    )
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create ingredient: ${error.message}`);
+  }
+
+  return mapInventoryItemRow(data as Record<string, unknown>);
+}
+
+export async function updateInventoryItem(
+  itemId: string,
+  input: InventoryItemMutationInput
+): Promise<InventoryItemRow> {
+  const normalizedItemId = itemId.trim();
+
+  if (!normalizedItemId) {
+    throw new Error("Ingredient id is required.");
+  }
+
+  const supabase = getSupabaseClient();
+  const payload = normalizeInventoryMutationInput(input);
+
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .update(payload)
+    .eq("id", normalizedItemId)
+    .select(
+      "id, name, category, unit, current_stock, reorder_threshold, created_at"
+    )
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update ingredient: ${error.message}`);
+  }
+
+  return mapInventoryItemRow(data as Record<string, unknown>);
+}
+
+export async function deleteInventoryItem(itemId: string): Promise<void> {
+  const normalizedItemId = itemId.trim();
+
+  if (!normalizedItemId) {
+    throw new Error("Ingredient id is required.");
+  }
+
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from("inventory_items")
+    .delete()
+    .eq("id", normalizedItemId);
+
+  if (error) {
+    throw new Error(`Failed to delete ingredient: ${error.message}`);
+  }
 }
 
 function buildFallbackIngredients(
