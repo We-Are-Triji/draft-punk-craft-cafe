@@ -1176,6 +1176,7 @@ export function InventoryScreen() {
                             {aiScanResult.quantity_estimate > 0
                               ? `${formatNumber(aiScanResult.quantity_estimate)} ${aiScanResult.unit}`
                               : "N/A (set manually)"}
+                          </p>
                           <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
                             {formatNumber(aiScanResult.quantity_estimate)} {aiScanResult.unit}
                           </p>
