@@ -29,7 +29,11 @@ import {
   type AiScanProgressUpdate,
   type StockOutProductScanResult,
 } from "@/lib/inventoryService";
-import { normalizeImageForAiScan } from "@/lib/imageUpload";
+import {
+  isHeicOrHeifFile,
+  normalizeImageForAiScan,
+  waitForNextPaint,
+} from "@/lib/imageUpload";
 import { createSaleTransaction } from "@/lib/transactionService";
 import type {
   InventoryItemRow,
@@ -567,7 +571,8 @@ export function TransactionsScreen() {
 
     aiImagePreparingRef.current = true;
     setIsAiImagePreparing(true);
-    setAiImage(null);
+    const inputWasHeic = isHeicOrHeifFile(imageFile);
+    setAiImage(imageFile);
     setAiScanResult(null);
     setAiSelectedProductId(null);
     setAiQuantityInput("1");
@@ -577,21 +582,25 @@ export function TransactionsScreen() {
         URL.revokeObjectURL(currentPreview);
       }
 
-      return null;
+      return URL.createObjectURL(imageFile);
     });
 
     try {
+      await waitForNextPaint();
       const normalizedImageFile = await normalizeImageForAiScan(imageFile);
 
       setActionError(null);
       setAiImage(normalizedImageFile);
-      setAiPreviewUrl((currentPreview) => {
-        if (currentPreview) {
-          URL.revokeObjectURL(currentPreview);
-        }
 
-        return URL.createObjectURL(normalizedImageFile);
-      });
+      if (inputWasHeic && normalizedImageFile !== imageFile) {
+        setAiPreviewUrl((currentPreview) => {
+          if (currentPreview) {
+            URL.revokeObjectURL(currentPreview);
+          }
+
+          return URL.createObjectURL(normalizedImageFile);
+        });
+      }
     } catch (imageError) {
       setAiImage(null);
       setAiScanResult(null);

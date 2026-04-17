@@ -4,6 +4,20 @@ const AI_SCAN_MAX_IMAGE_EDGE = 1280;
 const AI_SCAN_MAX_FILE_SIZE_BYTES = 1_200_000;
 const AI_SCAN_JPEG_QUALITY = 0.86;
 
+export function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.requestAnimationFrame === "function"
+    ) {
+      window.requestAnimationFrame(() => resolve());
+      return;
+    }
+
+    setTimeout(resolve, 0);
+  });
+}
+
 function hasHeicExtension(fileName: string): boolean {
   const normalized = fileName.trim().toLowerCase();
 

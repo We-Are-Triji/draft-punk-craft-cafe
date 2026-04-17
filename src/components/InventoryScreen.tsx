@@ -19,7 +19,11 @@ import {
   scanImageForStockInCatalog,
   type AiScanProgressUpdate,
 } from "@/lib/inventoryService";
-import { normalizeImageForAiScan } from "@/lib/imageUpload";
+import {
+  isHeicOrHeifFile,
+  normalizeImageForAiScan,
+  waitForNextPaint,
+} from "@/lib/imageUpload";
 import type {
   IngredientDeduction,
   InventoryItemRow,
@@ -252,7 +256,8 @@ function toAiLineDrafts(
       detected_name: ingredient.item_name,
       detected_unit: ingredient.unit,
       selected_key: matched?.key ?? "",
-      quantity: formatNumber(Math.max(0, ingredient.quantity)),
+      quantity:
+        ingredient.quantity > 0 ? formatNumber(ingredient.quantity) : "",
     };
   });
 }
@@ -519,7 +524,9 @@ export function InventoryScreen() {
 
     aiImagePreparingRef.current = true;
     setIsAiImagePreparing(true);
-    setAiImage(null);
+    const inputWasHeic = isHeicOrHeifFile(imageFile);
+
+    setAiImage(imageFile);
     setAiScanResult(null);
     setAiLines([]);
     setAiPreviewUrl((currentPreview) => {
@@ -527,21 +534,25 @@ export function InventoryScreen() {
         URL.revokeObjectURL(currentPreview);
       }
 
-      return null;
+      return URL.createObjectURL(imageFile);
     });
 
     try {
+      await waitForNextPaint();
       const normalizedImageFile = await normalizeImageForAiScan(imageFile);
 
       setActionError(null);
       setAiImage(normalizedImageFile);
-      setAiPreviewUrl((currentPreview) => {
-        if (currentPreview) {
-          URL.revokeObjectURL(currentPreview);
-        }
 
-        return URL.createObjectURL(normalizedImageFile);
-      });
+      if (inputWasHeic && normalizedImageFile !== imageFile) {
+        setAiPreviewUrl((currentPreview) => {
+          if (currentPreview) {
+            URL.revokeObjectURL(currentPreview);
+          }
+
+          return URL.createObjectURL(normalizedImageFile);
+        });
+      }
     } catch (imageError) {
       setAiImage(null);
       setAiScanResult(null);
@@ -636,6 +647,11 @@ export function InventoryScreen() {
       }, 1200);
     }
   };
+
+  const aiLinesMissingQuantityCount = useMemo(
+    () => aiLines.filter((line) => line.quantity.trim().length === 0).length,
+    [aiLines]
+  );
 
   const updateAiLine = (lineId: string, field: "selected_key" | "quantity", value: string) => {
     setAiLines((previousLines) =>
@@ -1156,6 +1172,10 @@ export function InventoryScreen() {
                           <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Quantity Estimate
                           </p>
+                          <p className="text-sm font-semibold text-gray-800 mt-1">
+                            {aiScanResult.quantity_estimate > 0
+                              ? `${formatNumber(aiScanResult.quantity_estimate)} ${aiScanResult.unit}`
+                              : "N/A (set manually)"}
                           <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
                             {formatNumber(aiScanResult.quantity_estimate)} {aiScanResult.unit}
                           </p>
@@ -1175,6 +1195,12 @@ export function InventoryScreen() {
                             + Add Line
                           </button>
                         </div>
+
+                        {aiLinesMissingQuantityCount > 0 ? (
+                          <div className="px-4 py-2 border-b border-amber-100 bg-amber-50 text-xs text-amber-700 font-semibold">
+                            {aiLinesMissingQuantityCount} line(s) have unknown quantity. Review and enter quantity before confirming.
+                          </div>
+                        ) : null}
 
                         <div className="overflow-auto">
                           <table className="w-full text-left">
@@ -1223,6 +1249,7 @@ export function InventoryScreen() {
                                         min="0"
                                         step="0.01"
                                         value={line.quantity}
+                                        placeholder="N/A - set qty"
                                         onChange={(event) =>
                                           updateAiLine(
                                             line.id,

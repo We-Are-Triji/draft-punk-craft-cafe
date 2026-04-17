@@ -113,6 +113,7 @@ interface CachedStockInSemanticPayload {
   quantity_estimate: number;
   unit: string;
   ingredients_to_deduct: IngredientDeduction[];
+  image_file_size?: number;
 }
 
 interface CachedStockOutSemanticPayload {
@@ -308,7 +309,8 @@ function isIngredientDeductionRecord(value: unknown): value is IngredientDeducti
     typeof record.item_name === "string" &&
     typeof record.category === "string" &&
     typeof record.unit === "string" &&
-    Number(record.quantity) > 0
+    Number.isFinite(Number(record.quantity)) &&
+    Number(record.quantity) >= 0
   );
 }
 
@@ -330,11 +332,14 @@ function normalizeIngredientDeductions(
       item_name: item.item_name.trim(),
       category: item.category.trim() || "Recipe",
       unit: item.unit.trim() || "pcs",
-      quantity: normalizePositiveQuantity(item.quantity, 0),
+      quantity:
+        Number(item.quantity) > 0
+          ? normalizePositiveQuantity(item.quantity, 0)
+          : 0,
     });
   }
 
-  return normalized.filter((item) => item.item_name && item.quantity > 0);
+  return normalized.filter((item) => item.item_name);
 }
 
 function normalizeStockInSemanticPayload(
@@ -359,14 +364,23 @@ function normalizeStockInSemanticPayload(
     confidenceRaw === "high" || confidenceRaw === "medium" || confidenceRaw === "low"
       ? confidenceRaw
       : "medium";
+  const rawQuantityEstimate = Number(record.quantity_estimate);
+  const quantityEstimate =
+    Number.isFinite(rawQuantityEstimate) && rawQuantityEstimate > 0
+      ? normalizePositiveQuantity(rawQuantityEstimate, 1)
+      : 0;
 
   return {
     item_name: itemName,
     category,
     confidence,
-    quantity_estimate: normalizePositiveQuantity(record.quantity_estimate, 1),
+    quantity_estimate: quantityEstimate,
     unit,
     ingredients_to_deduct: ingredients,
+    image_file_size:
+      Number(record.image_file_size) > 0
+        ? Number(record.image_file_size)
+        : undefined,
   };
 }
 
@@ -1041,17 +1055,29 @@ export async function scanImageForStockInCatalog(
         scope,
         signature,
         {
-          maxHammingDistance: 6,
+          maxHammingDistance: 3,
         }
       );
       const normalizedSemanticPayload = normalizeStockInSemanticPayload(semanticCached);
+      const cachedFileSize = normalizedSemanticPayload?.image_file_size ?? null;
+      const currentFileSize = file.size;
+      const hasComparableFileSize =
+        cachedFileSize !== null && cachedFileSize > 0 && currentFileSize > 0;
+      const fileSizeDeltaRatio = hasComparableFileSize
+        ? Math.abs(cachedFileSize - currentFileSize) /
+          Math.max(cachedFileSize, currentFileSize)
+        : 0;
+      const isFileSizeSimilar = !hasComparableFileSize || fileSizeDeltaRatio <= 0.14;
 
-      if (normalizedSemanticPayload) {
+      if (normalizedSemanticPayload && isFileSizeSimilar) {
+        const { image_file_size: _ignoredImageFileSize, ...cachedPayload } =
+          normalizedSemanticPayload;
+
         reportScanProgress(onProgress, 100, "Loaded cached result.");
         return {
           image_hash: imageHash,
           source: "cache" as const,
-          ...normalizedSemanticPayload,
+          ...cachedPayload,
         };
       }
     } catch {
@@ -1086,6 +1112,7 @@ export async function scanImageForStockInCatalog(
         quantity_estimate: scanResult.quantity_estimate,
         unit: scanResult.unit,
         ingredients_to_deduct: scanResult.ingredients_to_deduct,
+        image_file_size: file.size,
       });
     }
 

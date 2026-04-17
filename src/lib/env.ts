@@ -58,12 +58,12 @@ export const appEnv = {
   openRouterMinRequestIntervalMs: toPositiveInteger(
     runtimeEnv.VITE_OPENROUTER_MIN_REQUEST_INTERVAL_MS ??
       runtimeEnv.VITE_GEMINI_MIN_REQUEST_INTERVAL_MS,
-    700
+    350
   ),
   openRouterMaxModelsPerRequest: toPositiveInteger(
     runtimeEnv.VITE_OPENROUTER_MAX_MODELS_PER_REQUEST ??
       runtimeEnv.VITE_GEMINI_MAX_MODELS_PER_REQUEST,
-    1
+    2
   ),
   openRouterMaxRetries: toPositiveInteger(
     runtimeEnv.VITE_OPENROUTER_MAX_RETRIES ?? runtimeEnv.VITE_GEMINI_MAX_RETRIES,

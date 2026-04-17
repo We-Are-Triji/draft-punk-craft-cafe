@@ -38,19 +38,19 @@ function buildStockInCatalogPrompt(
 
   return [
     "You are an inventory stock-in assistant for a craft cafe.",
-    "Identify visible ingredients and quantities from this image.",
+    "Identify visible ingredients from this image and map them to the provided ingredient catalog.",
     "You MUST ONLY return ingredients from the provided catalog.",
-    "Return ONLY a JSON object in this exact format:",
+    "Return ONLY compact minified JSON (single line, no markdown, no extra text) in this exact format:",
     "{",
     '  "item_name": "string",',
     '  "confidence": "high" | "medium" | "low",',
-    '  "quantity_estimate": number,',
+    '  "quantity_estimate": number | null,',
     '  "unit": "string",',
     '  "ingredients_to_deduct": [',
     "    {",
     '      "item_name": "string",',
     '      "category": "string",',
-    '      "quantity": number,',
+    '      "quantity": number | null,',
     '      "unit": "string"',
     "    }",
     "  ]",
@@ -59,7 +59,11 @@ function buildStockInCatalogPrompt(
     "- Do not invent any ingredient outside the catalog.",
     "- item_name in ingredients_to_deduct must exactly match one catalog ingredient name.",
     "- unit in ingredients_to_deduct must exactly match catalog unit for that ingredient.",
-    "- Use positive quantities only.",
+    "- Recognize brand/trade names and map them to catalog ingredient names.",
+    "- Example mapping: Golden Fiesta -> Vegetable Oil, branded baking powder -> Baking Powder.",
+    "- If quantity is unclear or not visible, set quantity to null and unit to \"N/A\".",
+    "- For unlabeled fresh goods (for example raw meat trays), prioritize ingredient recognition and set quantity null when unsure.",
+    "- If packaging label clearly shows amount or count, provide it as quantity.",
     "- If uncertain, return lower confidence and fewer lines, never hallucinate.",
     "Ingredient Catalog:",
     catalogText,
@@ -77,7 +81,7 @@ function buildProductCatalogPrompt(products: ProductCatalogCandidate[]): string 
   return [
     "You are a product recognition assistant for stock-out transactions.",
     "Identify which ONE product from the product catalog is shown in the image.",
-    "Return ONLY a JSON object in this exact format:",
+    "Return ONLY compact minified JSON (single line, no markdown, no extra text) in this exact format:",
     "{",
     '  "product_name": "string",',
     '  "confidence": "high" | "medium" | "low",',
@@ -380,44 +384,72 @@ function getOpenRouterErrorMessage(payload: unknown): string | null {
   return null;
 }
 
+function getOpenRouterFinishReason(payload: unknown): string {
+  const finishReason =
+    (payload as { choices?: Array<{ finish_reason?: unknown }> })?.choices?.[0]
+      ?.finish_reason ?? "";
+
+  return typeof finishReason === "string" ? finishReason.trim().toLowerCase() : "";
+}
+
+function extractTextEntries(value: unknown): string[] {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => extractTextEntries(entry));
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  const textEntries: string[] = [];
+
+  if (typeof record.text === "string" && record.text.trim()) {
+    textEntries.push(record.text.trim());
+  }
+
+  if (typeof record.content === "string" && record.content.trim()) {
+    textEntries.push(record.content.trim());
+  }
+
+  if (record.content !== undefined && record.content !== null) {
+    textEntries.push(...extractTextEntries(record.content));
+  }
+
+  return textEntries;
+}
+
 function extractOpenRouterResponseText(payload: unknown): string {
-  const messageContent = (
+  const message = (
     payload as {
       choices?: Array<{
         message?: {
           content?: unknown;
+          reasoning?: unknown;
         };
       }>;
     }
-  )?.choices?.[0]?.message?.content;
+  )?.choices?.[0]?.message;
 
-  if (typeof messageContent === "string") {
-    return messageContent;
+  const contentText = extractTextEntries(message?.content).join("\n").trim();
+
+  if (contentText) {
+    return contentText;
   }
 
-  if (Array.isArray(messageContent)) {
-    const mergedText = messageContent
-      .map((entry) => {
-        if (typeof entry === "string") {
-          return entry;
-        }
+  const responsesApiOutputText = extractTextEntries(
+    (payload as { output?: unknown }).output
+  )
+    .join("\n")
+    .trim();
 
-        if (
-          entry &&
-          typeof entry === "object" &&
-          typeof (entry as { text?: unknown }).text === "string"
-        ) {
-          return String((entry as { text?: unknown }).text);
-        }
-
-        return "";
-      })
-      .join("\n")
-      .trim();
-
-    if (mergedText) {
-      return mergedText;
-    }
+  if (responsesApiOutputText) {
+    return responsesApiOutputText;
   }
 
   const legacyText =
@@ -427,7 +459,41 @@ function extractOpenRouterResponseText(payload: unknown): string {
     return legacyText;
   }
 
+  const reasoningText = extractTextEntries(message?.reasoning).join("\n").trim();
+
+  if (reasoningText) {
+    try {
+      return extractJsonString(reasoningText);
+    } catch {
+      if (getOpenRouterFinishReason(payload) === "length") {
+        throw new Error(
+          "OpenRouter response was truncated before it returned JSON. Increase VITE_OPENROUTER_MAX_OUTPUT_TOKENS or use another fallback model."
+        );
+      }
+
+      throw new Error(
+        "OpenRouter returned reasoning output without final JSON. Please retry with another image or fallback model."
+      );
+    }
+  }
+
   throw new Error("OpenRouter returned an empty response.");
+}
+
+function assertOpenRouterPayloadHasValidJson(payload: unknown): void {
+  const responseText = extractOpenRouterResponseText(payload);
+
+  try {
+    JSON.parse(extractJsonString(responseText));
+  } catch {
+    if (getOpenRouterFinishReason(payload) === "length") {
+      throw new Error(
+        "OpenRouter response was truncated before it returned valid JSON. Increase VITE_OPENROUTER_MAX_OUTPUT_TOKENS or use another fallback model."
+      );
+    }
+
+    throw new Error("OpenRouter returned malformed JSON output.");
+  }
 }
 
 function assertOpenRouterApiKeyConfigured(): void {
@@ -574,6 +640,17 @@ function isUnsupportedJsonResponseModeError(message: string): boolean {
   );
 }
 
+function isUnsupportedReasoningConfigError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+
+  return (
+    normalized.includes("reasoning") &&
+    (normalized.includes("unsupported") ||
+      normalized.includes("unknown") ||
+      normalized.includes("invalid"))
+  );
+}
+
 async function requestGeminiResponsePayload(
   file: File,
   imageBase64: string,
@@ -617,17 +694,28 @@ async function requestGeminiResponsePayload(
     ],
   };
 
-  const sendRequest = async (
-    forceJsonResponse: boolean
-  ): Promise<{ response: Response; payload: unknown }> => {
-    const requestBody = forceJsonResponse
-      ? {
-          ...baseRequestBody,
-          response_format: {
-            type: "json_object",
-          },
-        }
-      : baseRequestBody;
+  const sendRequest = async (options: {
+    forceJsonResponse: boolean;
+    includeReasoningControls: boolean;
+  }): Promise<{ response: Response; payload: unknown }> => {
+    const requestBody = {
+      ...baseRequestBody,
+      ...(options.includeReasoningControls
+        ? {
+            reasoning: {
+              effort: "none",
+              exclude: true,
+            },
+          }
+        : {}),
+      ...(options.forceJsonResponse
+        ? {
+            response_format: {
+              type: "json_object",
+            },
+          }
+        : {}),
+    };
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -660,19 +748,54 @@ async function requestGeminiResponsePayload(
   geminiUsageState.last_model = model;
 
   let forceJsonResponse = appEnv.openRouterForceJsonResponse;
-  let { response, payload: responsePayload } = await sendRequest(forceJsonResponse);
+  let includeReasoningControls = true;
+  let response: Response | null = null;
+  let responsePayload: unknown = null;
 
-  if (!response.ok && forceJsonResponse) {
-    const errorMessageWithJsonMode =
+  for (let compatibilityAttempt = 0; compatibilityAttempt < 3; compatibilityAttempt += 1) {
+    ({ response, payload: responsePayload } = await sendRequest({
+      forceJsonResponse,
+      includeReasoningControls,
+    }));
+
+    if (response.ok) {
+      break;
+    }
+
+    const compatibilityErrorMessage =
       getOpenRouterErrorMessage(responsePayload) ?? "";
 
+    let shouldRetryWithCompatibilityFallback = false;
+
     if (
+      forceJsonResponse &&
       response.status === 400 &&
-      isUnsupportedJsonResponseModeError(errorMessageWithJsonMode)
+      isUnsupportedJsonResponseModeError(compatibilityErrorMessage)
     ) {
       forceJsonResponse = false;
-      ({ response, payload: responsePayload } = await sendRequest(forceJsonResponse));
+      shouldRetryWithCompatibilityFallback = true;
     }
+
+    if (
+      includeReasoningControls &&
+      response.status === 400 &&
+      isUnsupportedReasoningConfigError(compatibilityErrorMessage)
+    ) {
+      includeReasoningControls = false;
+      shouldRetryWithCompatibilityFallback = true;
+    }
+
+    if (!shouldRetryWithCompatibilityFallback) {
+      break;
+    }
+  }
+
+  if (!response) {
+    throw {
+      status: 0,
+      message: "OpenRouter request did not return a response.",
+      model,
+    };
   }
 
   if (!response.ok) {
@@ -695,6 +818,19 @@ async function requestGeminiResponsePayload(
     };
   }
 
+  try {
+    assertOpenRouterPayloadHasValidJson(responsePayload);
+  } catch (validationError) {
+    throw {
+      status: 0,
+      message:
+        validationError instanceof Error
+          ? validationError.message
+          : "OpenRouter returned an invalid response payload.",
+      model,
+    };
+  }
+
   onProgress?.({
     step: "response_received",
     model,
@@ -705,11 +841,7 @@ async function requestGeminiResponsePayload(
 }
 
 function parseGeminiResponsePayload(payload: unknown): GeminiDetectionResult {
-  const responseText = extractOpenRouterResponseText(payload);
-
-  const parsedResponse = JSON.parse(
-    extractJsonString(responseText)
-  ) as Record<string, unknown>;
+  const parsedResponse = parseGeminiPayloadAsRecord(payload);
 
   const normalizedResult = {
     item_name: toNonEmptyString(parsedResponse.item_name, "Unknown Item"),
@@ -757,7 +889,17 @@ export function getGeminiUsageSnapshot(): GeminiUsageSnapshot {
 function parseGeminiPayloadAsRecord(payload: unknown): Record<string, unknown> {
   const responseText = extractOpenRouterResponseText(payload);
 
-  return JSON.parse(extractJsonString(responseText)) as Record<string, unknown>;
+  try {
+    return JSON.parse(extractJsonString(responseText)) as Record<string, unknown>;
+  } catch {
+    if (getOpenRouterFinishReason(payload) === "length") {
+      throw new Error(
+        "OpenRouter response was truncated before it returned valid JSON. Increase VITE_OPENROUTER_MAX_OUTPUT_TOKENS or use another fallback model."
+      );
+    }
+
+    throw new Error("OpenRouter returned malformed JSON output.");
+  }
 }
 
 async function requestGeminiPayloadWithFallback(
@@ -887,8 +1029,7 @@ async function requestGeminiPayloadWithFallback(
 
 function mapStockInIngredientsToCatalog(
   rawIngredients: unknown,
-  catalog: StockInCatalogIngredient[],
-  fallbackQuantity: number
+  catalog: StockInCatalogIngredient[]
 ): IngredientDeduction[] {
   const catalogByExactKey = new Map<string, StockInCatalogIngredient>();
   const catalogByName = new Map<string, StockInCatalogIngredient>();
@@ -908,6 +1049,102 @@ function mapStockInIngredientsToCatalog(
     return [];
   }
 
+  const resolveCatalogCandidate = (
+    rawName: string,
+    rawUnit: string,
+    rawCategory: string
+  ): StockInCatalogIngredient | null => {
+    const normalizedRawName = normalizeText(rawName);
+
+    if (!normalizedRawName) {
+      return null;
+    }
+
+    const normalizedRawUnit = normalizeText(rawUnit);
+    const normalizedRawCategory = normalizeText(rawCategory);
+    const exactCatalogKey = `${normalizedRawName}|${normalizedRawUnit}`;
+    const exactCatalogMatch = catalogByExactKey.get(exactCatalogKey) ?? null;
+
+    if (exactCatalogMatch) {
+      return exactCatalogMatch;
+    }
+
+    const nameMatch = catalogByName.get(normalizedRawName) ?? null;
+
+    if (nameMatch) {
+      return nameMatch;
+    }
+
+    const includesMatch =
+      catalog.find((candidate) => {
+        const normalizedCandidateName = normalizeText(candidate.name);
+
+        return (
+          normalizedCandidateName.includes(normalizedRawName) ||
+          normalizedRawName.includes(normalizedCandidateName)
+        );
+      }) ?? null;
+
+    if (includesMatch) {
+      return includesMatch;
+    }
+
+    if (normalizedRawCategory) {
+      const categoryAnchoredMatches = catalog.filter((candidate) => {
+        const normalizedCandidateName = normalizeText(candidate.name);
+        const normalizedCandidateCategory = normalizeText(candidate.category);
+
+        return (
+          normalizedCandidateName.includes(normalizedRawCategory) ||
+          normalizedCandidateCategory === normalizedRawCategory
+        );
+      });
+
+      if (categoryAnchoredMatches.length === 1) {
+        return categoryAnchoredMatches[0];
+      }
+    }
+
+    let bestCandidate: StockInCatalogIngredient | null = null;
+    let bestScore = 0;
+
+    for (const candidate of catalog) {
+      const normalizedCandidateName = normalizeText(candidate.name);
+      const normalizedCandidateCategory = normalizeText(candidate.category);
+      let score = getTokenOverlapScore(rawName, candidate.name);
+
+      if (normalizedRawCategory) {
+        score += getTokenOverlapScore(rawCategory, candidate.name) * 0.5;
+
+        if (normalizedCandidateCategory === normalizedRawCategory) {
+          score += 0.18;
+        }
+      }
+
+      if (
+        normalizedCandidateName.includes(normalizedRawName) ||
+        normalizedRawName.includes(normalizedCandidateName)
+      ) {
+        score += 0.2;
+      }
+
+      if (normalizedRawUnit && normalizeText(candidate.unit) === normalizedRawUnit) {
+        score += 0.12;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestCandidate = candidate;
+      }
+    }
+
+    if (bestScore >= 0.34) {
+      return bestCandidate;
+    }
+
+    return null;
+  };
+
   const mergedByKey = new Map<string, IngredientDeduction>();
 
   for (const rawIngredient of rawIngredients) {
@@ -918,31 +1155,34 @@ function mapStockInIngredientsToCatalog(
     const record = rawIngredient as Record<string, unknown>;
     const rawName = toNonEmptyString(record.item_name ?? record.name, "");
     const rawUnit = toNonEmptyString(record.unit, "");
+    const rawCategory = toNonEmptyString(record.category, "");
 
     if (!rawName) {
       continue;
     }
 
-    const exactCatalogKey = `${normalizeText(rawName)}|${normalizeText(rawUnit)}`;
-    const matchedCatalog =
-      catalogByExactKey.get(exactCatalogKey) ??
-      catalogByName.get(normalizeText(rawName)) ??
-      null;
+    const matchedCatalog = resolveCatalogCandidate(rawName, rawUnit, rawCategory);
 
     if (!matchedCatalog) {
       continue;
     }
 
-    const quantity = clampQuantity(
-      toPositiveNumber(record.quantity, fallbackQuantity),
-      0.05,
-      500
-    );
+    const parsedQuantity = Number(record.quantity);
+    const hasExplicitQuantity =
+      Number.isFinite(parsedQuantity) && parsedQuantity > 0;
+    const quantity = hasExplicitQuantity
+      ? clampQuantity(parsedQuantity, 0.05, 500)
+      : 0;
+
+    const resolvedQuantity =
+      quantity > 0 ? Number(quantity.toFixed(3)) : 0;
     const mergedKey = `${normalizeText(matchedCatalog.name)}|${normalizeText(matchedCatalog.unit)}`;
     const existing = mergedByKey.get(mergedKey);
 
     if (existing) {
-      existing.quantity = Number((existing.quantity + quantity).toFixed(3));
+      if (resolvedQuantity > 0) {
+        existing.quantity = Number((existing.quantity + resolvedQuantity).toFixed(3));
+      }
       continue;
     }
 
@@ -950,7 +1190,7 @@ function mapStockInIngredientsToCatalog(
       item_name: matchedCatalog.name,
       category: matchedCatalog.category,
       unit: matchedCatalog.unit,
-      quantity: Number(quantity.toFixed(3)),
+      quantity: resolvedQuantity,
     });
   }
 
@@ -1004,16 +1244,15 @@ export async function detectStockInWithCatalogGemini(
     step: "parsing",
   });
   const parsed = parseGeminiPayloadAsRecord(responsePayload);
-  const quantityEstimate = clampQuantity(
-    toPositiveNumber(parsed.quantity_estimate, 1),
-    0.05,
-    500
-  );
+  const rawQuantityEstimate = Number(parsed.quantity_estimate);
+  const quantityEstimate =
+    Number.isFinite(rawQuantityEstimate) && rawQuantityEstimate > 0
+      ? clampQuantity(rawQuantityEstimate, 0.05, 500)
+      : 0;
 
   const ingredients = mapStockInIngredientsToCatalog(
     parsed.ingredients_to_deduct,
-    ingredientCatalog,
-    quantityEstimate
+    ingredientCatalog
   );
 
   if (ingredients.length === 0) {
@@ -1027,7 +1266,10 @@ export async function detectStockInWithCatalogGemini(
     category: "Stock In",
     confidence: toConfidenceLevel(parsed.confidence),
     quantity_estimate: Number(quantityEstimate.toFixed(3)),
-    unit: toNonEmptyString(parsed.unit, "batch"),
+    unit: toNonEmptyString(
+      parsed.unit,
+      quantityEstimate > 0 ? "batch" : "N/A"
+    ),
     ingredients_to_deduct: ingredients,
   };
 }
