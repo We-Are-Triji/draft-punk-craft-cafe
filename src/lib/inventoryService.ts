@@ -347,6 +347,23 @@ function toStockDelta(transactionType: TransactionType, quantity: number): numbe
   return -quantity;
 }
 
+function buildScanTransactionNotes(
+  dishOrItemName: string,
+  notes: string | undefined
+): string {
+  const marker = `Detected dish/item: ${dishOrItemName}`;
+
+  if (!notes || !notes.trim()) {
+    return marker;
+  }
+
+  if (notes.includes("Detected dish/item:")) {
+    return notes;
+  }
+
+  return `${notes}\n${marker}`;
+}
+
 export async function scanImageForDeduction(file: File): Promise<ScanDetectionResult> {
   const imageHash = await hashImageFile(file);
   const cachedResult = await getCachedImageResult(imageHash);
@@ -463,7 +480,7 @@ export async function confirmScanDeduction({
         quantity: normalizedQuantity,
         image_url: imageUrl,
         detected_by_ai: true,
-        notes: notes ?? `Detected dish/item: ${detection.item_name}`,
+        notes: buildScanTransactionNotes(detection.item_name, notes),
       })
       .select("id")
       .single();

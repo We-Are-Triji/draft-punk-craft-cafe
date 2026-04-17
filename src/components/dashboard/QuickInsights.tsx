@@ -1,31 +1,110 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingDown, Clock, Flame } from "lucide-react";
+import type {
+  DashboardPeakHour,
+  DashboardStockLevelDatum,
+  DashboardTopScannedDatum,
+} from "@/hooks/useDashboardMetrics";
+import type { ScanHistoryEvent } from "@/hooks/useScanHistory";
 
-const insights = [
-  {
-    icon: TrendingDown,
-    iconBg: "bg-red-50 dark:bg-red-950/40",
-    iconColor: "text-red-500",
-    text: "Milk is running low",
-    detail: "Only 0.94 L left — restock recommended",
-  },
-  {
-    icon: Flame,
-    iconBg: "bg-amber-50 dark:bg-amber-950/40",
-    iconColor: "text-amber-600",
-    text: "Latte is trending",
-    detail: "Most scanned dish 3 days in a row",
-  },
-  {
-    icon: Clock,
-    iconBg: "bg-blue-50 dark:bg-blue-950/40",
-    iconColor: "text-blue-500",
-    text: "Peak scan time: 9–11 AM",
-    detail: "62% of today's scans happened in the morning",
-  },
-];
+interface QuickInsightsProps {
+  loading: boolean;
+  lowestStockItem: DashboardStockLevelDatum | null;
+  trendingItem: DashboardTopScannedDatum | null;
+  peakScanHour: DashboardPeakHour | null;
+  latestScan: ScanHistoryEvent | null;
+}
 
-export function QuickInsights() {
+interface InsightItem {
+  icon: typeof TrendingDown;
+  iconBg: string;
+  iconColor: string;
+  text: string;
+  detail: string;
+}
+
+function formatQuantity(value: number): string {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return String(Number(value.toFixed(2)));
+}
+
+function formatScanDateTime(value: string): string {
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "recently";
+  }
+
+  return parsedDate.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function QuickInsights({
+  loading,
+  lowestStockItem,
+  trendingItem,
+  peakScanHour,
+  latestScan,
+}: QuickInsightsProps) {
+  const insights: InsightItem[] = [
+    {
+      icon: TrendingDown,
+      iconBg: "bg-red-50 dark:bg-red-950/40",
+      iconColor: "text-red-500",
+      text: loading
+        ? "Checking inventory levels"
+        : lowestStockItem
+          ? `${lowestStockItem.name} needs attention`
+          : "Inventory is healthy",
+      detail: loading
+        ? "Loading stock status..."
+        : lowestStockItem
+          ? `${formatQuantity(lowestStockItem.current_stock)} ${lowestStockItem.unit} left, reorder at ${formatQuantity(lowestStockItem.reorder_threshold)} ${lowestStockItem.unit}`
+          : "No ingredient is currently below threshold.",
+    },
+    {
+      icon: Flame,
+      iconBg: "bg-amber-50 dark:bg-amber-950/40",
+      iconColor: "text-amber-600",
+      text: loading
+        ? "Analyzing scan trends"
+        : trendingItem
+          ? `${trendingItem.name} is trending`
+          : "No trend available yet",
+      detail: loading
+        ? "Loading scan activity..."
+        : trendingItem
+          ? `${trendingItem.scans} scan(s) over the last 3 days`
+          : "Scan an item to start seeing trend insights.",
+    },
+    {
+      icon: Clock,
+      iconBg: "bg-blue-50 dark:bg-blue-950/40",
+      iconColor: "text-blue-500",
+      text: loading
+        ? "Building scan timeline"
+        : peakScanHour
+          ? `Peak scan time: ${peakScanHour.label}`
+          : latestScan
+            ? `Latest scan: ${latestScan.item_name}`
+            : "No scan timeline yet",
+      detail: loading
+        ? "Loading scan timeline..."
+        : peakScanHour
+          ? `${peakScanHour.count} scan(s), ${peakScanHour.share_percent}% of today's activity`
+          : latestScan
+            ? `Last recorded on ${formatScanDateTime(latestScan.created_at)}`
+            : "Your most active scan hour will appear after scans are logged.",
+    },
+  ];
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {insights.map((item) => (
