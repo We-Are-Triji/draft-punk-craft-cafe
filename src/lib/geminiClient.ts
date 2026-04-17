@@ -459,6 +459,17 @@ function toGeminiRequestErrorShape(
   };
 }
 
+function isQuotaOrRateLimitErrorMessage(message: string): boolean {
+  const normalizedMessage = message.trim().toLowerCase();
+
+  return (
+    normalizedMessage.includes("quota") ||
+    normalizedMessage.includes("resource has been exhausted") ||
+    normalizedMessage.includes("too many requests") ||
+    normalizedMessage.includes("rate limit")
+  );
+}
+
 async function requestGeminiResponsePayload(
   file: File,
   imageBase64: string,
@@ -616,8 +627,12 @@ async function requestGeminiPayloadWithFallback(
     modelsToTry = [...candidateModels];
   }
 
+  const maxModelsPerRequest = Math.max(1, appEnv.geminiMaxModelsPerRequest);
+  modelsToTry = modelsToTry.slice(0, maxModelsPerRequest);
+
   const maxRetries = Math.max(0, appEnv.geminiMaxRetries);
   let lastError: GeminiRequestErrorShape | null = null;
+  let stoppedByRateLimit = false;
 
   for (const model of modelsToTry) {
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -639,7 +654,7 @@ async function requestGeminiPayloadWithFallback(
         const isRateLimited = normalizedError.status === 429;
         const isTransientError =
           normalizedError.status >= 500 || normalizedError.status === 0;
-        const canRetry = attempt < maxRetries && (isRateLimited || isTransientError);
+        const canRetry = attempt < maxRetries && isTransientError;
 
         if (canRetry) {
           geminiUsageState.total_retries += 1;
@@ -650,14 +665,29 @@ async function requestGeminiPayloadWithFallback(
 
         if (isRateLimited) {
           modelCooldownUntil.set(model, Date.now() + appEnv.geminiCooldownMs);
+          stoppedByRateLimit = true;
         }
 
         break;
       }
     }
+
+    if (stoppedByRateLimit) {
+      break;
+    }
   }
 
   geminiUsageState.total_failures += 1;
+
+  if (
+    stoppedByRateLimit &&
+    lastError &&
+    isQuotaOrRateLimitErrorMessage(lastError.message)
+  ) {
+    throw new Error(
+      "Gemini rate limit reached. Please wait about one minute before scanning again."
+    );
+  }
 
   if (lastError) {
     throw new Error(

@@ -18,6 +18,7 @@ import {
   recordManualStockIn,
   scanImageForStockInCatalog,
 } from "@/lib/inventoryService";
+import { normalizeImageForAiScan } from "@/lib/imageUpload";
 import type {
   IngredientDeduction,
   InventoryItemRow,
@@ -263,11 +264,13 @@ export function InventoryScreen() {
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
 
   const aiFileInputRef = useRef<HTMLInputElement | null>(null);
+  const aiImagePreparingRef = useRef(false);
   const [aiImage, setAiImage] = useState<File | null>(null);
   const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
   const [isAiDragging, setIsAiDragging] = useState(false);
   const [aiScanResult, setAiScanResult] = useState<ScanDetectionResult | null>(null);
   const [aiLines, setAiLines] = useState<AiLineDraft[]>([]);
+  const [isAiImagePreparing, setIsAiImagePreparing] = useState(false);
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [isAiConfirming, setIsAiConfirming] = useState(false);
 
@@ -387,9 +390,12 @@ export function InventoryScreen() {
   const selectedManualIngredient =
     catalogByKey.get(manualIngredientKey) ?? null;
 
-  const combinedError = inventoryError ?? productsError ?? actionError;
+  const combinedError =
+    inventoryError ?? productsError ?? (stockInMode === null ? actionError : null);
 
   const resetAiState = () => {
+    aiImagePreparingRef.current = false;
+    setIsAiImagePreparing(false);
     setAiImage(null);
     setAiScanResult(null);
     setAiLines([]);
@@ -429,10 +435,11 @@ export function InventoryScreen() {
   };
 
   const closeStockInModal = () => {
-    if (isManualSubmitting || isAiScanning || isAiConfirming) {
+    if (isManualSubmitting || isAiImagePreparing || isAiScanning || isAiConfirming) {
       return;
     }
 
+    setActionError(null);
     setStockInMode(null);
 
     if (stockInMode === "ai") {
@@ -440,7 +447,11 @@ export function InventoryScreen() {
     }
   };
 
-  const setAiImageFile = (imageFile: File) => {
+  const setAiImageFile = async (imageFile: File) => {
+    if (aiImagePreparingRef.current || isAiScanning || isAiConfirming) {
+      return;
+    }
+
     if (!isSupportedImageFile(imageFile)) {
       setActionError(
         "Please upload a valid image file (jpg, png, gif, webp, heic, heif)."
@@ -448,31 +459,67 @@ export function InventoryScreen() {
       return;
     }
 
-    setActionError(null);
+    aiImagePreparingRef.current = true;
+    setIsAiImagePreparing(true);
+    setAiImage(null);
     setAiScanResult(null);
     setAiLines([]);
-    setAiImage(imageFile);
     setAiPreviewUrl((currentPreview) => {
       if (currentPreview) {
         URL.revokeObjectURL(currentPreview);
       }
 
-      return URL.createObjectURL(imageFile);
+      return null;
     });
+
+    try {
+      const normalizedImageFile = await normalizeImageForAiScan(imageFile);
+
+      setActionError(null);
+      setAiImage(normalizedImageFile);
+      setAiPreviewUrl((currentPreview) => {
+        if (currentPreview) {
+          URL.revokeObjectURL(currentPreview);
+        }
+
+        return URL.createObjectURL(normalizedImageFile);
+      });
+    } catch (imageError) {
+      setAiImage(null);
+      setAiScanResult(null);
+      setAiLines([]);
+      setActionError(
+        imageError instanceof Error
+          ? imageError.message
+          : "Unable to process this image file."
+      );
+    } finally {
+      aiImagePreparingRef.current = false;
+      setIsAiImagePreparing(false);
+    }
   };
 
   const handleAiDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+
+    if (isAiImagePreparing || isAiScanning || isAiConfirming) {
+      return;
+    }
+
     setIsAiDragging(false);
 
     const droppedFile = event.dataTransfer.files?.[0];
 
     if (droppedFile) {
-      setAiImageFile(droppedFile);
+      void setAiImageFile(droppedFile);
     }
   };
 
   const handleAiScan = async () => {
+    if (isAiImagePreparing || isAiScanning) {
+      return;
+    }
+
     if (!aiImage) {
       setActionError("Choose or drop an image before scanning.");
       return;
@@ -767,6 +814,12 @@ export function InventoryScreen() {
             </div>
 
             <form onSubmit={submitManualStockIn} className="space-y-4">
+              {actionError && (
+                <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {actionError}
+                </div>
+              )}
+
               <div>
                 <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                   Ingredient
@@ -857,14 +910,20 @@ export function InventoryScreen() {
               <button
                 type="button"
                 onClick={closeStockInModal}
-                className="p-2 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground"
-                disabled={isAiScanning || isAiConfirming}
+                className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                disabled={isAiImagePreparing || isAiScanning || isAiConfirming}
               >
                 <XCircle size={18} />
               </button>
             </div>
 
             <div className="p-5 overflow-auto space-y-4">
+              {actionError && (
+                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {actionError}
+                </div>
+              )}
+
               {recipeIngredientCatalog.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                   No recipe ingredients are configured yet. Add ingredients on Recipes first.
@@ -875,23 +934,35 @@ export function InventoryScreen() {
                     onDrop={handleAiDrop}
                     onDragOver={(event) => {
                       event.preventDefault();
+
+                      if (isAiImagePreparing || isAiScanning || isAiConfirming) {
+                        return;
+                      }
+
                       setIsAiDragging(true);
                     }}
-                    onDragLeave={() => setIsAiDragging(false)}
+                    onDragLeave={() => {
+                      if (isAiImagePreparing || isAiScanning || isAiConfirming) {
+                        return;
+                      }
+
+                      setIsAiDragging(false);
+                    }}
                     className={`flex min-h-48 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-                      isAiDragging ? "border-amber-600 bg-amber-50 dark:bg-amber-950/20" : "border-gray-200 dark:border-border"
-                    }`}
+                      isAiDragging ? "border-amber-600 bg-amber-50" : "border-gray-200"
+                    } ${isAiImagePreparing ? "opacity-70 cursor-not-allowed" : ""}`}
                   >
                     <input
                       ref={aiFileInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
                       className="hidden"
+                      disabled={isAiImagePreparing || isAiScanning || isAiConfirming}
                       onChange={(event) => {
                         const nextFile = event.currentTarget.files?.[0];
 
                         if (nextFile) {
-                          setAiImageFile(nextFile);
+                          void setAiImageFile(nextFile);
                         }
 
                         event.currentTarget.value = "";
@@ -912,6 +983,12 @@ export function InventoryScreen() {
                           <p className="text-sm text-gray-500 dark:text-muted-foreground">
                             Or choose an image to scan ingredients and quantities.
                           </p>
+                          {isAiImagePreparing ? (
+                            <p className="inline-flex items-center gap-2 text-sm text-amber-700 font-semibold">
+                              <LoaderCircle className="animate-spin" size={14} />
+                              Processing image...
+                            </p>
+                          ) : null}
                         </div>
                       </>
                     )}
@@ -921,18 +998,22 @@ export function InventoryScreen() {
                     <button
                       type="button"
                       onClick={() => aiFileInputRef.current?.click()}
-                      className="px-3 py-2 rounded-xl border border-gray-200 dark:border-border text-sm font-semibold text-gray-600 dark:text-muted-foreground bg-white dark:bg-card"
-                      disabled={isAiScanning || isAiConfirming}
+                      className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white"
+                      disabled={isAiImagePreparing || isAiScanning || isAiConfirming}
                     >
-                      Choose Image
+                      {isAiImagePreparing ? "Processing..." : "Choose Image"}
                     </button>
                     <button
                       type="button"
                       onClick={handleAiScan}
                       className="px-3 py-2 rounded-xl bg-[#3E2723] text-white text-sm font-semibold disabled:opacity-70"
-                      disabled={!aiImage || isAiScanning || isAiConfirming}
+                      disabled={!aiImage || isAiImagePreparing || isAiScanning || isAiConfirming}
                     >
-                      {isAiScanning ? (
+                      {isAiImagePreparing ? (
+                        <span className="inline-flex items-center gap-2">
+                          <LoaderCircle className="animate-spin" size={14} /> Processing image...
+                        </span>
+                      ) : isAiScanning ? (
                         <span className="inline-flex items-center gap-2">
                           <LoaderCircle className="animate-spin" size={14} /> Scanning...
                         </span>

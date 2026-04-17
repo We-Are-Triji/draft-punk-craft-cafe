@@ -28,6 +28,7 @@ import {
   scanImageForStockOutProductCatalog,
   type StockOutProductScanResult,
 } from "@/lib/inventoryService";
+import { normalizeImageForAiScan } from "@/lib/imageUpload";
 import { createSaleTransaction } from "@/lib/transactionService";
 import type {
   InventoryItemRow,
@@ -264,10 +265,12 @@ export function TransactionsScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const aiFileInputRef = useRef<HTMLInputElement | null>(null);
+  const aiImagePreparingRef = useRef(false);
   const [isStockOutAiModalOpen, setIsStockOutAiModalOpen] = useState(false);
   const [aiImage, setAiImage] = useState<File | null>(null);
   const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
   const [isAiDragging, setIsAiDragging] = useState(false);
+  const [isAiImagePreparing, setIsAiImagePreparing] = useState(false);
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [aiScanResult, setAiScanResult] = useState<StockOutProductScanResult | null>(null);
@@ -426,6 +429,8 @@ export function TransactionsScreen() {
     !isAiSubmitting;
 
   const resetAiForm = () => {
+    aiImagePreparingRef.current = false;
+    setIsAiImagePreparing(false);
     setAiImage(null);
     setAiScanResult(null);
     setAiSelectedProductId(null);
@@ -433,9 +438,9 @@ export function TransactionsScreen() {
     setAiUnitPriceInput("");
     setAiNotesInput("");
     setIsAiDragging(false);
-    setAiPreviewUrl((currentPreviewUrl) => {
-      if (currentPreviewUrl) {
-        URL.revokeObjectURL(currentPreviewUrl);
+    setAiPreviewUrl((currentPreview) => {
+      if (currentPreview) {
+        URL.revokeObjectURL(currentPreview);
       }
 
       return null;
@@ -448,6 +453,7 @@ export function TransactionsScreen() {
   };
 
   const closeCreateOptionsModal = () => {
+    setActionError(null);
     setIsCreateOptionsOpen(false);
   };
 
@@ -475,19 +481,25 @@ export function TransactionsScreen() {
       return;
     }
 
+    setActionError(null);
     setIsCreateModalOpen(false);
   };
 
   const closeAiStockOutModal = () => {
-    if (isAiScanning || isAiSubmitting) {
+    if (isAiImagePreparing || isAiScanning || isAiSubmitting) {
       return;
     }
 
+    setActionError(null);
     setIsStockOutAiModalOpen(false);
     resetAiForm();
   };
 
-  const setAiImageFile = (imageFile: File) => {
+  const setAiImageFile = async (imageFile: File) => {
+    if (aiImagePreparingRef.current || isAiScanning || isAiSubmitting) {
+      return;
+    }
+
     if (!isSupportedImageFile(imageFile)) {
       setActionError(
         "Please upload a valid image file (jpg, png, gif, webp, heic, heif)."
@@ -495,33 +507,71 @@ export function TransactionsScreen() {
       return;
     }
 
-    setActionError(null);
+    aiImagePreparingRef.current = true;
+    setIsAiImagePreparing(true);
+    setAiImage(null);
     setAiScanResult(null);
     setAiSelectedProductId(null);
     setAiQuantityInput("1");
     setAiUnitPriceInput("");
-    setAiImage(imageFile);
     setAiPreviewUrl((currentPreview) => {
       if (currentPreview) {
         URL.revokeObjectURL(currentPreview);
       }
 
-      return URL.createObjectURL(imageFile);
+      return null;
     });
+
+    try {
+      const normalizedImageFile = await normalizeImageForAiScan(imageFile);
+
+      setActionError(null);
+      setAiImage(normalizedImageFile);
+      setAiPreviewUrl((currentPreview) => {
+        if (currentPreview) {
+          URL.revokeObjectURL(currentPreview);
+        }
+
+        return URL.createObjectURL(normalizedImageFile);
+      });
+    } catch (imageError) {
+      setAiImage(null);
+      setAiScanResult(null);
+      setAiSelectedProductId(null);
+      setAiQuantityInput("1");
+      setAiUnitPriceInput("");
+      setActionError(
+        imageError instanceof Error
+          ? imageError.message
+          : "Unable to process this image file."
+      );
+    } finally {
+      aiImagePreparingRef.current = false;
+      setIsAiImagePreparing(false);
+    }
   };
 
   const handleAiDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+
+    if (isAiImagePreparing || isAiScanning || isAiSubmitting) {
+      return;
+    }
+
     setIsAiDragging(false);
 
     const droppedFile = event.dataTransfer.files?.[0];
 
     if (droppedFile) {
-      setAiImageFile(droppedFile);
+      void setAiImageFile(droppedFile);
     }
   };
 
   const handleAiScan = async () => {
+    if (isAiImagePreparing || isAiScanning) {
+      return;
+    }
+
     if (!aiImage) {
       setActionError("Choose or drop an image before scanning.");
       return;
@@ -694,7 +744,13 @@ export function TransactionsScreen() {
     }
   };
 
-  const combinedError = operationsError ?? productsError ?? inventoryError ?? actionError;
+  const hasOpenModal =
+    isCreateOptionsOpen || isCreateModalOpen || isStockOutAiModalOpen;
+  const combinedError =
+    operationsError ??
+    productsError ??
+    inventoryError ??
+    (hasOpenModal ? null : actionError);
 
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col gap-4 p-2 animate-in fade-in duration-500">
@@ -767,6 +823,12 @@ export function TransactionsScreen() {
               onSubmit={handleCreateSale}
               className="flex-1 overflow-auto p-5 grid grid-cols-1 lg:grid-cols-2 gap-6"
             >
+              {actionError && (
+                <div className="lg:col-span-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {actionError}
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-black text-gray-700 dark:text-foreground uppercase tracking-wider">
@@ -1022,14 +1084,20 @@ export function TransactionsScreen() {
               </div>
               <button
                 onClick={closeAiStockOutModal}
-                className="p-2 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground"
-                disabled={isAiScanning || isAiSubmitting}
+                className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                disabled={isAiImagePreparing || isAiScanning || isAiSubmitting}
               >
                 <XCircle size={18} />
               </button>
             </div>
 
             <div className="flex-1 overflow-auto p-5 space-y-4">
+              {actionError && (
+                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {actionError}
+                </div>
+              )}
+
               {aiProductCatalog.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                   No active products are configured. Add products and recipes first.
@@ -1040,23 +1108,35 @@ export function TransactionsScreen() {
                     onDrop={handleAiDrop}
                     onDragOver={(event) => {
                       event.preventDefault();
+
+                      if (isAiImagePreparing || isAiScanning || isAiSubmitting) {
+                        return;
+                      }
+
                       setIsAiDragging(true);
                     }}
-                    onDragLeave={() => setIsAiDragging(false)}
+                    onDragLeave={() => {
+                      if (isAiImagePreparing || isAiScanning || isAiSubmitting) {
+                        return;
+                      }
+
+                      setIsAiDragging(false);
+                    }}
                     className={`flex min-h-48 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-                      isAiDragging ? "border-amber-600 bg-amber-50 dark:bg-amber-950/20" : "border-gray-200 dark:border-border"
-                    }`}
+                      isAiDragging ? "border-amber-600 bg-amber-50" : "border-gray-200"
+                    } ${isAiImagePreparing ? "opacity-70 cursor-not-allowed" : ""}`}
                   >
                     <input
                       ref={aiFileInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
                       className="hidden"
+                      disabled={isAiImagePreparing || isAiScanning || isAiSubmitting}
                       onChange={(event) => {
                         const nextFile = event.currentTarget.files?.[0];
 
                         if (nextFile) {
-                          setAiImageFile(nextFile);
+                          void setAiImageFile(nextFile);
                         }
 
                         event.currentTarget.value = "";
@@ -1077,6 +1157,12 @@ export function TransactionsScreen() {
                           <p className="text-sm text-gray-500 dark:text-muted-foreground">
                             Or choose an image to classify product and estimate quantity.
                           </p>
+                          {isAiImagePreparing ? (
+                            <p className="inline-flex items-center gap-2 text-sm text-amber-700 font-semibold">
+                              <LoaderCircle className="animate-spin" size={14} />
+                              Processing image...
+                            </p>
+                          ) : null}
                         </div>
                       </>
                     )}
@@ -1086,18 +1172,22 @@ export function TransactionsScreen() {
                     <button
                       type="button"
                       onClick={() => aiFileInputRef.current?.click()}
-                      className="px-3 py-2 rounded-xl border border-gray-200 dark:border-border text-sm font-semibold text-gray-600 dark:text-muted-foreground bg-white dark:bg-card"
-                      disabled={isAiScanning || isAiSubmitting}
+                      className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white"
+                      disabled={isAiImagePreparing || isAiScanning || isAiSubmitting}
                     >
-                      Choose Image
+                      {isAiImagePreparing ? "Processing..." : "Choose Image"}
                     </button>
                     <button
                       type="button"
                       onClick={handleAiScan}
                       className="px-3 py-2 rounded-xl bg-[#3E2723] text-white text-sm font-semibold disabled:opacity-70"
-                      disabled={!aiImage || isAiScanning || isAiSubmitting}
+                      disabled={!aiImage || isAiImagePreparing || isAiScanning || isAiSubmitting}
                     >
-                      {isAiScanning ? (
+                      {isAiImagePreparing ? (
+                        <span className="inline-flex items-center gap-2">
+                          <LoaderCircle className="animate-spin" size={14} /> Processing image...
+                        </span>
+                      ) : isAiScanning ? (
                         <span className="inline-flex items-center gap-2">
                           <LoaderCircle className="animate-spin" size={14} /> Scanning...
                         </span>

@@ -32,7 +32,11 @@ export const appEnv = {
     runtimeEnv.VITE_GEMINI_MIN_REQUEST_INTERVAL_MS,
     700
   ),
-  geminiMaxRetries: toPositiveInteger(runtimeEnv.VITE_GEMINI_MAX_RETRIES, 2),
+  geminiMaxModelsPerRequest: toPositiveInteger(
+    runtimeEnv.VITE_GEMINI_MAX_MODELS_PER_REQUEST,
+    1
+  ),
+  geminiMaxRetries: toPositiveInteger(runtimeEnv.VITE_GEMINI_MAX_RETRIES, 1),
   geminiCooldownMs: toPositiveInteger(runtimeEnv.VITE_GEMINI_COOLDOWN_MS, 60_000),
 };
 
