@@ -37,11 +37,14 @@ export function Sidebar({ activeTab, onTabChange, onLogout, theme, onToggleTheme
     <aside
       className={cn(
         "flex flex-col border-r border-border bg-card h-screen sticky top-0 transition-all duration-300",
-        collapsed ? "w-16" : "w-56"
+        collapsed ? "w-[68px]" : "w-56"
       )}
     >
       {/* Brand */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border">
+      <div className={cn(
+        "flex items-center border-b border-border",
+        collapsed ? "flex-col gap-2 px-2 py-4" : "gap-2.5 px-4 py-4"
+      )}>
         <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-800 text-white shrink-0">
           <Coffee className="w-4 h-4" />
         </div>
@@ -57,7 +60,10 @@ export function Sidebar({ activeTab, onTabChange, onLogout, theme, onToggleTheme
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="ml-auto w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className={cn(
+            "flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+            collapsed ? "w-7 h-7" : "ml-auto w-6 h-6"
+          )}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
@@ -79,8 +85,10 @@ export function Sidebar({ activeTab, onTabChange, onLogout, theme, onToggleTheme
           <button
             key={item.tab}
             onClick={() => onTabChange(item.tab)}
+            title={collapsed ? item.label : undefined}
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+              "flex items-center rounded-lg text-sm transition-all",
+              collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5",
               activeTab === item.tab
                 ? "bg-amber-800 text-white font-medium shadow-sm"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -137,10 +145,11 @@ export function Sidebar({ activeTab, onTabChange, onLogout, theme, onToggleTheme
         <button
           onClick={onLogout}
           className={cn(
-            "flex items-center gap-2 w-full rounded-lg text-[11px] font-medium transition-all",
+            "flex items-center w-full rounded-lg text-[11px] font-medium transition-all",
             "text-muted-foreground hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20",
-            collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
+            collapsed ? "justify-center px-2 py-2" : "gap-2 px-3 py-2"
           )}
+          title={collapsed ? "Sign out" : undefined}
         >
           <LogOut className="w-3.5 h-3.5 shrink-0" />
           {!collapsed && <span>Sign out</span>}
