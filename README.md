@@ -6,20 +6,32 @@ Presentation-only ERP inventory prototype for BS Industrial Engineering capstone
 
 - React + Vite + TypeScript
 - Supabase (Database, API, Realtime, Storage)
-- Gemini API (`gemini-2.0-flash`) for image-based detection
+- OpenRouter API (vision models) for image-based detection
 
 ## Environment Setup
 
 1. Copy `.env.example` into `.env`.
-2. Fill in your Supabase and Gemini credentials.
+2. Fill in your Supabase and OpenRouter credentials.
 
 Required variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_SUPABASE_STORAGE_BUCKET`
-- `VITE_GEMINI_API_KEY`
-- `VITE_GEMINI_MODEL`
+- `VITE_OPENROUTER_API_KEY`
+- `VITE_OPENROUTER_MODEL`
+
+Recommended free-tier model setup:
+
+- `VITE_OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free`
+- `VITE_OPENROUTER_MODEL_FALLBACKS=`
+- `VITE_OPENROUTER_MAX_MODELS_PER_REQUEST=1`
+- `VITE_OPENROUTER_MAX_RETRIES=1`
+
+Notes:
+
+- The app supports fallback model lists and cooldown/retry throttling in `.env.example`.
+- Model availability can change on OpenRouter; if a model is unavailable, swap to another currently listed `:free` vision model in your OpenRouter dashboard.
 
 ## Supabase Schema
 

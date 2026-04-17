@@ -1,8 +1,6 @@
-import { appEnv, assertRuntimeEnv } from "@/lib/env";
+import { appEnv } from "@/lib/env";
 import { assertImageQualityForAi } from "@/lib/imageQuality";
 import type { ConfidenceLevel, IngredientDeduction } from "@/types/inventory";
-
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 const INVENTORY_ANALYSIS_PROMPT = [
   "You are an inventory assistant for a craft cafe.",
@@ -263,7 +261,7 @@ function extractJsonString(rawText: string): string {
   const lastBrace = trimmed.lastIndexOf("}");
 
   if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
-    throw new Error("Gemini did not return a valid JSON object.");
+    throw new Error("AI model did not return a valid JSON object.");
   }
 
   return trimmed.slice(firstBrace, lastBrace + 1);
@@ -344,18 +342,86 @@ function toIngredients(value: unknown, fallbackIngredient: IngredientDeduction):
   return normalizedIngredients;
 }
 
-function getGeminiErrorMessage(payload: unknown): string | null {
+function getOpenRouterErrorMessage(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") {
     return null;
   }
 
-  const errorPayload = (payload as { error?: { message?: string } }).error;
+  const errorPayload = (
+    payload as {
+      error?: { message?: string; metadata?: { raw?: string } };
+    }
+  ).error;
 
   if (errorPayload && typeof errorPayload.message === "string") {
     return errorPayload.message;
   }
 
+  if (errorPayload?.metadata && typeof errorPayload.metadata.raw === "string") {
+    return errorPayload.metadata.raw;
+  }
+
   return null;
+}
+
+function extractOpenRouterResponseText(payload: unknown): string {
+  const messageContent = (
+    payload as {
+      choices?: Array<{
+        message?: {
+          content?: unknown;
+        };
+      }>;
+    }
+  )?.choices?.[0]?.message?.content;
+
+  if (typeof messageContent === "string") {
+    return messageContent;
+  }
+
+  if (Array.isArray(messageContent)) {
+    const mergedText = messageContent
+      .map((entry) => {
+        if (typeof entry === "string") {
+          return entry;
+        }
+
+        if (
+          entry &&
+          typeof entry === "object" &&
+          typeof (entry as { text?: unknown }).text === "string"
+        ) {
+          return String((entry as { text?: unknown }).text);
+        }
+
+        return "";
+      })
+      .join("\n")
+      .trim();
+
+    if (mergedText) {
+      return mergedText;
+    }
+  }
+
+  const legacyText =
+    (payload as { choices?: Array<{ text?: unknown }> })?.choices?.[0]?.text ?? "";
+
+  if (typeof legacyText === "string" && legacyText.trim()) {
+    return legacyText;
+  }
+
+  throw new Error("OpenRouter returned an empty response.");
+}
+
+function assertOpenRouterApiKeyConfigured(): void {
+  if (appEnv.openRouterApiKey.trim()) {
+    return;
+  }
+
+  throw new Error(
+    "Missing required environment variable: VITE_OPENROUTER_API_KEY. Create a local .env file based on .env.example."
+  );
 }
 
 function delay(milliseconds: number): Promise<void> {
@@ -367,18 +433,18 @@ function delay(milliseconds: number): Promise<void> {
 function getCandidateModels(): string[] {
   const modelSet = new Set<string>();
 
-  if (appEnv.geminiModel.trim()) {
-    modelSet.add(appEnv.geminiModel.trim());
+  if (appEnv.openRouterModel.trim()) {
+    modelSet.add(appEnv.openRouterModel.trim());
   }
 
-  for (const fallbackModel of appEnv.geminiFallbackModels) {
+  for (const fallbackModel of appEnv.openRouterFallbackModels) {
     if (fallbackModel.trim()) {
       modelSet.add(fallbackModel.trim());
     }
   }
 
   if (modelSet.size === 0) {
-    modelSet.add("gemini-2.0-flash");
+    modelSet.add("qwen/qwen2.5-vl-72b-instruct:free");
   }
 
   return [...modelSet];
@@ -421,7 +487,7 @@ async function waitForRequestSlot(): Promise<void> {
     const now = Date.now();
     const waitMs = Math.max(
       0,
-      lastRequestStartAt + appEnv.geminiMinRequestIntervalMs - now
+      lastRequestStartAt + appEnv.openRouterMinRequestIntervalMs - now
     );
 
     if (waitMs > 0) {
@@ -454,7 +520,7 @@ function toGeminiRequestErrorShape(
 
   return {
     status: 0,
-    message: error instanceof Error ? error.message : "Unknown Gemini error.",
+    message: error instanceof Error ? error.message : "Unknown OpenRouter error.",
     model,
   };
 }
@@ -470,13 +536,37 @@ function isQuotaOrRateLimitErrorMessage(message: string): boolean {
   );
 }
 
+function isModelUnavailableError(error: GeminiRequestErrorShape): boolean {
+  const normalizedMessage = error.message.trim().toLowerCase();
+
+  return (
+    error.status === 404 &&
+    (normalizedMessage.includes("no endpoints found") ||
+      normalizedMessage.includes("model not found") ||
+      normalizedMessage.includes("no route found"))
+  );
+}
+
 async function requestGeminiResponsePayload(
   file: File,
   imageBase64: string,
   model: string,
   promptText: string
 ): Promise<unknown> {
-  const endpoint = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${appEnv.geminiApiKey}`;
+  const endpoint = `${appEnv.openRouterApiBase.replace(/\/$/, "")}/chat/completions`;
+  const imageMimeType = file.type || "image/jpeg";
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${appEnv.openRouterApiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  if (appEnv.openRouterSiteUrl.trim()) {
+    headers["HTTP-Referer"] = appEnv.openRouterSiteUrl.trim();
+  }
+
+  if (appEnv.openRouterSiteName.trim()) {
+    headers["X-Title"] = appEnv.openRouterSiteName.trim();
+  }
 
   await waitForRequestSlot();
 
@@ -485,35 +575,39 @@ async function requestGeminiResponsePayload(
 
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
-      contents: [
+      model,
+      temperature: 0.1,
+      messages: [
         {
-          parts: [
-            { text: promptText },
+          role: "user",
+          content: [
+            { type: "text", text: promptText },
             {
-              inline_data: {
-                mime_type: file.type || "image/jpeg",
-                data: imageBase64,
+              type: "image_url",
+              image_url: {
+                url: `data:${imageMimeType};base64,${imageBase64}`,
               },
             },
           ],
         },
       ],
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
     }),
   });
 
-  const responsePayload = await response.json();
+  let responsePayload: unknown = null;
+
+  try {
+    responsePayload = await response.json();
+  } catch {
+    responsePayload = null;
+  }
 
   if (!response.ok) {
-    const geminiError = getGeminiErrorMessage(responsePayload);
+    const geminiError = getOpenRouterErrorMessage(responsePayload);
     const errorMessage =
-      geminiError ?? `Gemini API error for model ${model} (status ${response.status}).`;
+      geminiError ?? `OpenRouter API error for model ${model} (status ${response.status}).`;
 
     throw {
       status: response.status,
@@ -522,23 +616,19 @@ async function requestGeminiResponsePayload(
     };
   }
 
+  if (!responsePayload) {
+    throw {
+      status: 0,
+      message: "OpenRouter returned an unreadable response payload.",
+      model,
+    };
+  }
+
   return responsePayload;
 }
 
 function parseGeminiResponsePayload(payload: unknown): GeminiDetectionResult {
-  const responseTextCandidate =
-    (payload as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }>;
-    })?.candidates?.[0]?.content?.parts?.find(
-      (part: { text?: unknown }) => typeof part.text === "string"
-    )?.text;
-
-  const responseText =
-    typeof responseTextCandidate === "string" ? responseTextCandidate : "";
-
-  if (!responseText) {
-    throw new Error("Gemini returned an empty response.");
-  }
+  const responseText = extractOpenRouterResponseText(payload);
 
   const parsedResponse = JSON.parse(
     extractJsonString(responseText)
@@ -588,19 +678,7 @@ export function getGeminiUsageSnapshot(): GeminiUsageSnapshot {
 }
 
 function parseGeminiPayloadAsRecord(payload: unknown): Record<string, unknown> {
-  const responseTextCandidate =
-    (payload as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }>;
-    })?.candidates?.[0]?.content?.parts?.find(
-      (part: { text?: unknown }) => typeof part.text === "string"
-    )?.text;
-
-  const responseText =
-    typeof responseTextCandidate === "string" ? responseTextCandidate : "";
-
-  if (!responseText) {
-    throw new Error("Gemini returned an empty response.");
-  }
+  const responseText = extractOpenRouterResponseText(payload);
 
   return JSON.parse(extractJsonString(responseText)) as Record<string, unknown>;
 }
@@ -613,24 +691,25 @@ async function requestGeminiPayloadWithFallback(
 
   const imageBase64 = arrayBufferToBase64(await file.arrayBuffer());
   const candidateModels = getCandidateModels();
-  let modelsToTry = candidateModels.filter(
+  let availableModels = candidateModels.filter(
     (model) => (modelCooldownUntil.get(model) ?? 0) <= Date.now()
   );
 
-  if (modelsToTry.length === 0) {
+  if (availableModels.length === 0) {
     const waitMs = getCooldownWaitMs(candidateModels);
 
     if (waitMs > 0) {
       await delay(waitMs);
     }
 
-    modelsToTry = [...candidateModels];
+    availableModels = [...candidateModels];
   }
 
-  const maxModelsPerRequest = Math.max(1, appEnv.geminiMaxModelsPerRequest);
-  modelsToTry = modelsToTry.slice(0, maxModelsPerRequest);
+  const maxModelsPerRequest = Math.max(1, appEnv.openRouterMaxModelsPerRequest);
+  const modelsToTry = availableModels.slice(0, maxModelsPerRequest);
+  let overflowModelIndex = maxModelsPerRequest;
 
-  const maxRetries = Math.max(0, appEnv.geminiMaxRetries);
+  const maxRetries = Math.max(0, appEnv.openRouterMaxRetries);
   let lastError: GeminiRequestErrorShape | null = null;
   let stoppedByRateLimit = false;
 
@@ -651,6 +730,15 @@ async function requestGeminiPayloadWithFallback(
         lastError = normalizedError;
         geminiUsageState.last_error = normalizedError.message;
 
+        if (isModelUnavailableError(normalizedError)) {
+          const nextFallbackModel = availableModels[overflowModelIndex];
+
+          if (nextFallbackModel && !modelsToTry.includes(nextFallbackModel)) {
+            modelsToTry.push(nextFallbackModel);
+            overflowModelIndex += 1;
+          }
+        }
+
         const isRateLimited = normalizedError.status === 429;
         const isTransientError =
           normalizedError.status >= 500 || normalizedError.status === 0;
@@ -664,7 +752,7 @@ async function requestGeminiPayloadWithFallback(
         }
 
         if (isRateLimited) {
-          modelCooldownUntil.set(model, Date.now() + appEnv.geminiCooldownMs);
+          modelCooldownUntil.set(model, Date.now() + appEnv.openRouterCooldownMs);
           stoppedByRateLimit = true;
         }
 
@@ -685,17 +773,23 @@ async function requestGeminiPayloadWithFallback(
     isQuotaOrRateLimitErrorMessage(lastError.message)
   ) {
     throw new Error(
-      "Gemini rate limit reached. Please wait about one minute before scanning again."
+      "OpenRouter rate limit reached. Please wait about one minute before scanning again."
     );
   }
 
   if (lastError) {
+    if (isModelUnavailableError(lastError)) {
+      throw new Error(
+        `OpenRouter model ${lastError.model} has no active endpoint right now. Set VITE_OPENROUTER_MODEL to another free vision model and keep at least one fallback model configured.`
+      );
+    }
+
     throw new Error(
-      `Gemini request failed (${lastError.status || "network"}) on model ${lastError.model}: ${lastError.message}`
+      `OpenRouter request failed (${lastError.status || "network"}) on model ${lastError.model}: ${lastError.message}`
     );
   }
 
-  throw new Error("Gemini request failed: all models are unavailable.");
+  throw new Error("OpenRouter request failed: all models are unavailable.");
 }
 
 function mapStockInIngredientsToCatalog(
@@ -773,7 +867,7 @@ function mapStockInIngredientsToCatalog(
 export async function detectIngredientsWithGemini(
   file: File
 ): Promise<GeminiDetectionResult> {
-  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+  assertOpenRouterApiKeyConfigured();
 
   await assertImageQualityForAi(file);
   const responsePayload = await requestGeminiPayloadWithFallback(
@@ -788,7 +882,7 @@ export async function detectStockInWithCatalogGemini(
   file: File,
   ingredientCatalog: StockInCatalogIngredient[]
 ): Promise<GeminiDetectionResult> {
-  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+  assertOpenRouterApiKeyConfigured();
 
   if (ingredientCatalog.length === 0) {
     throw new Error("Ingredient catalog is required for stock-in scanning.");
@@ -830,7 +924,7 @@ export async function classifyProductWithCatalogGemini(
   file: File,
   productCatalog: ProductCatalogCandidate[]
 ): Promise<GeminiProductClassificationResult> {
-  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+  assertOpenRouterApiKeyConfigured();
 
   if (productCatalog.length === 0) {
     throw new Error("Product catalog is required for stock-out scanning.");

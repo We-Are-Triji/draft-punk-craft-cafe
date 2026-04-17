@@ -25,19 +25,38 @@ export const appEnv = {
   supabaseUrl: runtimeEnv.VITE_SUPABASE_URL ?? "",
   supabaseAnonKey: runtimeEnv.VITE_SUPABASE_ANON_KEY ?? "",
   supabaseStorageBucket: runtimeEnv.VITE_SUPABASE_STORAGE_BUCKET ?? "scan-images",
-  geminiApiKey: runtimeEnv.VITE_GEMINI_API_KEY ?? "",
-  geminiModel: runtimeEnv.VITE_GEMINI_MODEL ?? "gemini-2.0-flash",
-  geminiFallbackModels: toModelList(runtimeEnv.VITE_GEMINI_MODEL_FALLBACKS),
-  geminiMinRequestIntervalMs: toPositiveInteger(
-    runtimeEnv.VITE_GEMINI_MIN_REQUEST_INTERVAL_MS,
+  openRouterApiKey:
+    runtimeEnv.VITE_OPENROUTER_API_KEY ?? runtimeEnv.VITE_GEMINI_API_KEY ?? "",
+  openRouterApiBase:
+    runtimeEnv.VITE_OPENROUTER_API_BASE ?? "https://openrouter.ai/api/v1",
+  openRouterModel:
+    runtimeEnv.VITE_OPENROUTER_MODEL ??
+    runtimeEnv.VITE_GEMINI_MODEL ??
+    "qwen/qwen2.5-vl-72b-instruct:free",
+  openRouterFallbackModels: toModelList(
+    runtimeEnv.VITE_OPENROUTER_MODEL_FALLBACKS ??
+      runtimeEnv.VITE_GEMINI_MODEL_FALLBACKS
+  ),
+  openRouterMinRequestIntervalMs: toPositiveInteger(
+    runtimeEnv.VITE_OPENROUTER_MIN_REQUEST_INTERVAL_MS ??
+      runtimeEnv.VITE_GEMINI_MIN_REQUEST_INTERVAL_MS,
     700
   ),
-  geminiMaxModelsPerRequest: toPositiveInteger(
-    runtimeEnv.VITE_GEMINI_MAX_MODELS_PER_REQUEST,
+  openRouterMaxModelsPerRequest: toPositiveInteger(
+    runtimeEnv.VITE_OPENROUTER_MAX_MODELS_PER_REQUEST ??
+      runtimeEnv.VITE_GEMINI_MAX_MODELS_PER_REQUEST,
     1
   ),
-  geminiMaxRetries: toPositiveInteger(runtimeEnv.VITE_GEMINI_MAX_RETRIES, 1),
-  geminiCooldownMs: toPositiveInteger(runtimeEnv.VITE_GEMINI_COOLDOWN_MS, 60_000),
+  openRouterMaxRetries: toPositiveInteger(
+    runtimeEnv.VITE_OPENROUTER_MAX_RETRIES ?? runtimeEnv.VITE_GEMINI_MAX_RETRIES,
+    1
+  ),
+  openRouterCooldownMs: toPositiveInteger(
+    runtimeEnv.VITE_OPENROUTER_COOLDOWN_MS ?? runtimeEnv.VITE_GEMINI_COOLDOWN_MS,
+    60_000
+  ),
+  openRouterSiteUrl: runtimeEnv.VITE_OPENROUTER_SITE_URL ?? "",
+  openRouterSiteName: runtimeEnv.VITE_OPENROUTER_SITE_NAME ?? "",
 };
 
 export function getMissingEnvVars(keys: string[]): string[] {
