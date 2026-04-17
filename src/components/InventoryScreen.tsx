@@ -14,6 +14,7 @@ import {
 import { useInventory } from "@/hooks/useInventory";
 import { useProducts } from "@/hooks/useProducts";
 import {
+  cacheStockInScanCorrection,
   confirmScanDeduction,
   recordManualStockIn,
   scanImageForStockInCatalog,
@@ -24,6 +25,7 @@ import {
   normalizeImageForAiScan,
   waitForNextPaint,
 } from "@/lib/imageUpload";
+import { evaluateImageQualityForAi } from "@/lib/imageQuality";
 import type {
   IngredientDeduction,
   InventoryItemRow,
@@ -86,6 +88,12 @@ interface AiLineDraft {
 
 interface AiScanProgressState extends AiScanProgressUpdate {
   started_at: number;
+}
+
+interface AiImagePreparationState {
+  percent: number;
+  message: string;
+  detail?: string;
 }
 
 function normalizeValue(value: string): string {
@@ -302,8 +310,11 @@ export function InventoryScreen() {
   const aiFileInputRef = useRef<HTMLInputElement | null>(null);
   const aiImagePreparingRef = useRef(false);
   const aiProgressClearTimeoutRef = useRef<number | null>(null);
+  const aiImagePreparationClearTimeoutRef = useRef<number | null>(null);
   const [aiImage, setAiImage] = useState<File | null>(null);
   const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
+  const [aiImagePreparation, setAiImagePreparation] =
+    useState<AiImagePreparationState | null>(null);
   const [isAiDragging, setIsAiDragging] = useState(false);
   const [aiScanResult, setAiScanResult] = useState<ScanDetectionResult | null>(null);
   const [aiLines, setAiLines] = useState<AiLineDraft[]>([]);
@@ -311,6 +322,7 @@ export function InventoryScreen() {
   const [aiScanClockMs, setAiScanClockMs] = useState(() => Date.now());
   const [isAiImagePreparing, setIsAiImagePreparing] = useState(false);
   const [isAiScanning, setIsAiScanning] = useState(false);
+  const [isAiDisputing, setIsAiDisputing] = useState(false);
   const [isAiConfirming, setIsAiConfirming] = useState(false);
 
   const loading = inventoryLoading || productsLoading;
@@ -412,6 +424,10 @@ export function InventoryScreen() {
       if (aiProgressClearTimeoutRef.current !== null) {
         window.clearTimeout(aiProgressClearTimeoutRef.current);
       }
+
+      if (aiImagePreparationClearTimeoutRef.current !== null) {
+        window.clearTimeout(aiImagePreparationClearTimeoutRef.current);
+      }
     };
   }, [aiPreviewUrl]);
 
@@ -453,6 +469,8 @@ export function InventoryScreen() {
   const resetAiState = () => {
     aiImagePreparingRef.current = false;
     setIsAiImagePreparing(false);
+    setIsAiDisputing(false);
+    setAiImagePreparation(null);
     setAiScanProgress(null);
     setAiImage(null);
     setAiScanResult(null);
@@ -469,6 +487,11 @@ export function InventoryScreen() {
     if (aiProgressClearTimeoutRef.current !== null) {
       window.clearTimeout(aiProgressClearTimeoutRef.current);
       aiProgressClearTimeoutRef.current = null;
+    }
+
+    if (aiImagePreparationClearTimeoutRef.current !== null) {
+      window.clearTimeout(aiImagePreparationClearTimeoutRef.current);
+      aiImagePreparationClearTimeoutRef.current = null;
     }
   };
 
@@ -498,7 +521,13 @@ export function InventoryScreen() {
   };
 
   const closeStockInModal = () => {
-    if (isManualSubmitting || isAiImagePreparing || isAiScanning || isAiConfirming) {
+    if (
+      isManualSubmitting ||
+      isAiImagePreparing ||
+      isAiScanning ||
+      isAiDisputing ||
+      isAiConfirming
+    ) {
       return;
     }
 
@@ -511,7 +540,7 @@ export function InventoryScreen() {
   };
 
   const setAiImageFile = async (imageFile: File) => {
-    if (aiImagePreparingRef.current || isAiScanning || isAiConfirming) {
+    if (aiImagePreparingRef.current || isAiScanning || isAiDisputing || isAiConfirming) {
       return;
     }
 
@@ -526,6 +555,17 @@ export function InventoryScreen() {
     setIsAiImagePreparing(true);
     const inputWasHeic = isHeicOrHeifFile(imageFile);
 
+    if (aiImagePreparationClearTimeoutRef.current !== null) {
+      window.clearTimeout(aiImagePreparationClearTimeoutRef.current);
+      aiImagePreparationClearTimeoutRef.current = null;
+    }
+
+    setAiImagePreparation({
+      percent: 8,
+      message: "Loading preview...",
+      detail: "Rendering selected photo in the preview panel.",
+    });
+
     setAiImage(imageFile);
     setAiScanResult(null);
     setAiLines([]);
@@ -539,6 +579,16 @@ export function InventoryScreen() {
 
     try {
       await waitForNextPaint();
+      setAiImagePreparation({
+        percent: inputWasHeic ? 28 : 22,
+        message: inputWasHeic
+          ? "Converting HEIC/HEIF to JPEG..."
+          : "Optimizing image for faster scan...",
+        detail: inputWasHeic
+          ? "Large HEIC files can take a few seconds to convert."
+          : "Compressing and resizing while preserving label details.",
+      });
+
       const normalizedImageFile = await normalizeImageForAiScan(imageFile);
 
       setActionError(null);
@@ -553,10 +603,36 @@ export function InventoryScreen() {
           return URL.createObjectURL(normalizedImageFile);
         });
       }
+
+      setAiImagePreparation({
+        percent: 74,
+        message: "Quality gate: checking dimensions, brightness, contrast, and sharpness...",
+        detail: "Verifying the image is readable for AI detection.",
+      });
+
+      const qualityAssessment = await evaluateImageQualityForAi(normalizedImageFile);
+
+      if (qualityAssessment.failureMessage) {
+        throw new Error(qualityAssessment.failureMessage);
+      }
+
+      setAiImagePreparation({
+        percent: 100,
+        message: "Photo is ready for AI scan.",
+        detail: qualityAssessment.checks
+          .map((check) => `${check.label}: ${check.value}`)
+          .join(" • "),
+      });
+
+      aiImagePreparationClearTimeoutRef.current = window.setTimeout(() => {
+        setAiImagePreparation(null);
+        aiImagePreparationClearTimeoutRef.current = null;
+      }, 1000);
     } catch (imageError) {
       setAiImage(null);
       setAiScanResult(null);
       setAiLines([]);
+      setAiImagePreparation(null);
       setActionError(
         imageError instanceof Error
           ? imageError.message
@@ -571,7 +647,7 @@ export function InventoryScreen() {
   const handleAiDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
 
-    if (isAiImagePreparing || isAiScanning || isAiConfirming) {
+    if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming) {
       return;
     }
 
@@ -585,7 +661,7 @@ export function InventoryScreen() {
   };
 
   const handleAiScan = async () => {
-    if (isAiImagePreparing || isAiScanning) {
+    if (isAiImagePreparing || isAiScanning || isAiDisputing) {
       return;
     }
 
@@ -612,6 +688,7 @@ export function InventoryScreen() {
       message: "Preparing scan...",
       started_at: Date.now(),
     });
+    setIsAiDisputing(false);
     setIsAiScanning(true);
 
     try {
@@ -640,6 +717,77 @@ export function InventoryScreen() {
           : "AI scan failed. Please try again."
       );
     } finally {
+      setIsAiScanning(false);
+      aiProgressClearTimeoutRef.current = window.setTimeout(() => {
+        setAiScanProgress(null);
+        aiProgressClearTimeoutRef.current = null;
+      }, 1200);
+    }
+  };
+
+  const handleAiDisputeAndRescan = async () => {
+    if (isAiImagePreparing || isAiScanning || isAiDisputing) {
+      return;
+    }
+
+    if (!aiImage) {
+      setActionError("Choose or drop an image before scanning.");
+      return;
+    }
+
+    if (recipeIngredientCatalog.length === 0) {
+      setActionError(
+        "No recipe ingredients are available. Configure recipe ingredients first."
+      );
+      return;
+    }
+
+    setActionError(null);
+    setActionSuccess(null);
+    if (aiProgressClearTimeoutRef.current !== null) {
+      window.clearTimeout(aiProgressClearTimeoutRef.current);
+      aiProgressClearTimeoutRef.current = null;
+    }
+    setAiScanProgress({
+      percent: 10,
+      message: "Dispute submitted. Clearing cache and re-scanning...",
+      started_at: Date.now(),
+    });
+    setIsAiDisputing(true);
+    setIsAiScanning(true);
+
+    try {
+      const detectedResult = await scanImageForStockInCatalog(
+        aiImage,
+        recipeIngredientCatalog,
+        (progress) => {
+          setAiScanProgress((previous) => mergeAiScanProgress(previous, progress));
+        },
+        {
+          forceFresh: true,
+          invalidateExistingCache: true,
+        }
+      );
+
+      setAiScanProgress((previous) =>
+        mergeAiScanProgress(previous, {
+          percent: 100,
+          message: "Fresh scan complete.",
+        })
+      );
+      setAiScanResult(detectedResult);
+      setAiLines(
+        toAiLineDrafts(detectedResult.ingredients_to_deduct, recipeIngredientCatalog)
+      );
+    } catch (scanError) {
+      setAiScanProgress(null);
+      setActionError(
+        scanError instanceof Error
+          ? scanError.message
+          : "Fresh AI scan failed. Please try again."
+      );
+    } finally {
+      setIsAiDisputing(false);
       setIsAiScanning(false);
       aiProgressClearTimeoutRef.current = window.setTimeout(() => {
         setAiScanProgress(null);
@@ -760,6 +908,20 @@ export function InventoryScreen() {
         notes: `Stock-in AI confirmation for ${aiScanResult.item_name}`,
       });
 
+      if (aiImage) {
+        void cacheStockInScanCorrection({
+          file: aiImage,
+          catalog: recipeIngredientCatalog,
+          correction: {
+            item_name: confirmationPayload.item_name,
+            category: confirmationPayload.category,
+            quantity_estimate: confirmationPayload.quantity_estimate,
+            unit: confirmationPayload.unit,
+            ingredients_to_deduct: confirmationPayload.ingredients_to_deduct,
+          },
+        });
+      }
+
       await refresh();
       setActionSuccess(
         `Stock-in confirmed. ${response.deductionsApplied} transaction line(s) were recorded.`
@@ -863,7 +1025,7 @@ export function InventoryScreen() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
+            <div className="space-y-3">
               <button
                 type="button"
                 onClick={openAiStockIn}
@@ -1008,7 +1170,7 @@ export function InventoryScreen() {
                 type="button"
                 onClick={closeStockInModal}
                 className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
-                disabled={isAiImagePreparing || isAiScanning || isAiConfirming}
+                disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming}
               >
                 <XCircle size={18} />
               </button>
@@ -1032,29 +1194,29 @@ export function InventoryScreen() {
                     onDragOver={(event) => {
                       event.preventDefault();
 
-                      if (isAiImagePreparing || isAiScanning || isAiConfirming) {
+                      if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming) {
                         return;
                       }
 
                       setIsAiDragging(true);
                     }}
                     onDragLeave={() => {
-                      if (isAiImagePreparing || isAiScanning || isAiConfirming) {
+                      if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming) {
                         return;
                       }
 
                       setIsAiDragging(false);
                     }}
-                    className={`flex min-h-48 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
+                    className={`relative flex min-h-48 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
                       isAiDragging ? "border-amber-600 bg-amber-50" : "border-gray-200"
-                    } ${isAiImagePreparing ? "opacity-70 cursor-not-allowed" : ""}`}
+                    }`}
                   >
                     <input
                       ref={aiFileInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
                       className="hidden"
-                      disabled={isAiImagePreparing || isAiScanning || isAiConfirming}
+                      disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming}
                       onChange={(event) => {
                         const nextFile = event.currentTarget.files?.[0];
 
@@ -1080,39 +1242,77 @@ export function InventoryScreen() {
                           <p className="text-sm text-gray-500 dark:text-muted-foreground">
                             Or choose an image to scan ingredients and quantities.
                           </p>
-                          {isAiImagePreparing ? (
-                            <p className="inline-flex items-center gap-2 text-sm text-amber-700 font-semibold">
-                              <LoaderCircle className="animate-spin" size={14} />
-                              Processing image...
-                            </p>
-                          ) : null}
                         </div>
                       </>
                     )}
+
+                    {isAiImagePreparing && aiImagePreparation ? (
+                      <div className="absolute inset-0 rounded-xl bg-black/55 text-white p-4 flex flex-col items-center justify-center gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/85">
+                          Preparing Photo
+                        </p>
+                        <p className="text-sm font-semibold text-center max-w-lg">
+                          {aiImagePreparation.message}
+                        </p>
+                        <div className="w-full max-w-md h-2 bg-white/25 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-white transition-[width] duration-300"
+                            style={{
+                              width: `${Math.max(8, Math.round(aiImagePreparation.percent))}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="text-[11px] font-semibold text-white/80">
+                          {Math.round(aiImagePreparation.percent)}%
+                        </p>
+                        {aiImagePreparation.detail ? (
+                          <p className="text-[11px] text-white/75 text-center max-w-2xl">
+                            {aiImagePreparation.detail}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-lg border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/40 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-600 dark:text-muted-foreground">
+                      Photo tips for better results
+                    </p>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-muted-foreground">
+                      Use one product per photo, keep labels fully visible, avoid glare and heavy shadows, and hold steady in bright light.
+                    </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => aiFileInputRef.current?.click()}
-                      className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white"
-                      disabled={isAiImagePreparing || isAiScanning || isAiConfirming}
+                      className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={
+                        isAiImagePreparing ||
+                        isAiScanning ||
+                        isAiDisputing ||
+                        isAiConfirming
+                      }
                     >
-                      {isAiImagePreparing ? "Processing..." : "Choose Image"}
+                      Choose Image
                     </button>
                     <button
                       type="button"
                       onClick={handleAiScan}
-                      className="px-3 py-2 rounded-xl bg-[#3E2723] text-white text-sm font-semibold disabled:opacity-70"
-                      disabled={!aiImage || isAiImagePreparing || isAiScanning || isAiConfirming}
+                      className="px-3 py-2 rounded-xl bg-[#3E2723] text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={
+                        !aiImage ||
+                        isAiImagePreparing ||
+                        isAiScanning ||
+                        isAiDisputing ||
+                        isAiConfirming
+                      }
                     >
-                      {isAiImagePreparing ? (
+                      {isAiScanning ? (
                         <span className="inline-flex items-center gap-2">
-                          <LoaderCircle className="animate-spin" size={14} /> Processing image...
-                        </span>
-                      ) : isAiScanning ? (
-                        <span className="inline-flex items-center gap-2">
-                          <LoaderCircle className="animate-spin" size={14} /> Scanning...
+                          <LoaderCircle className="animate-spin" size={14} />
+                          {isAiDisputing ? "Refreshing..." : "Scanning..."}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-2">
@@ -1151,6 +1351,26 @@ export function InventoryScreen() {
 
                   {aiScanResult ? (
                     <div className="space-y-4">
+                      <div className="rounded-xl border border-amber-200/70 bg-amber-50/80 px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-amber-800">
+                          Looks wrong? Dispute this result to clear its cache and force a fresh AI evaluation.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleAiDisputeAndRescan}
+                          className="px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-900 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming}
+                        >
+                          {isAiDisputing ? (
+                            <span className="inline-flex items-center gap-2">
+                              <LoaderCircle className="animate-spin" size={13} /> Re-scanning...
+                            </span>
+                          ) : (
+                            "Dispute & Re-scan Fresh"
+                          )}
+                        </button>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
                           <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
@@ -1176,9 +1396,6 @@ export function InventoryScreen() {
                             {aiScanResult.quantity_estimate > 0
                               ? `${formatNumber(aiScanResult.quantity_estimate)} ${aiScanResult.unit}`
                               : "N/A (set manually)"}
-                          </p>
-                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
-                            {formatNumber(aiScanResult.quantity_estimate)} {aiScanResult.unit}
                           </p>
                         </div>
                       </div>

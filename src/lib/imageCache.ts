@@ -208,6 +208,42 @@ export function upsertSemanticCachedPayload(
   saveSemanticCacheEntries(filteredEntries);
 }
 
+export function removeSemanticCachedPayload(
+  scope: string,
+  signature: string,
+  options?: {
+    maxHammingDistance?: number;
+  }
+): boolean {
+  const maxHammingDistance = options?.maxHammingDistance ?? 8;
+  const entries = loadSemanticCacheEntries();
+  let bestIndex = -1;
+  let bestDistance = Number.MAX_SAFE_INTEGER;
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+
+    if (entry.scope !== scope) {
+      continue;
+    }
+
+    const distance = hammingDistance(entry.signature, signature);
+
+    if (distance <= maxHammingDistance && distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+
+  if (bestIndex === -1) {
+    return false;
+  }
+
+  entries.splice(bestIndex, 1);
+  saveSemanticCacheEntries(entries);
+  return true;
+}
+
 export async function hashImageFile(file: File): Promise<string> {
   const imageBuffer = await file.arrayBuffer();
   const hashBuffer = await crypto.subtle.digest("SHA-256", imageBuffer);
@@ -257,5 +293,17 @@ export async function upsertCachedImageResult(
 
   if (error) {
     throw new Error(`Cache write failed: ${error.message}`);
+  }
+}
+
+export async function removeCachedImageResult(imageHash: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from("image_cache")
+    .delete()
+    .eq("image_hash", imageHash);
+
+  if (error) {
+    throw new Error(`Cache delete failed: ${error.message}`);
   }
 }

@@ -130,10 +130,16 @@ function getTokenOverlapScore(left: string, right: string): number {
   return overlap / Math.max(leftTokens.size, rightTokens.size);
 }
 
+interface ProductCandidateMatch {
+  candidate: ProductCatalogCandidate;
+  matchType: "exact" | "includes" | "token";
+  score: number;
+}
+
 function resolveProductCandidate(
   rawProductName: string,
   candidates: ProductCatalogCandidate[]
-): ProductCatalogCandidate | null {
+): ProductCandidateMatch | null {
   const normalizedRaw = normalizeText(rawProductName);
 
   if (!normalizedRaw) {
@@ -145,7 +151,11 @@ function resolveProductCandidate(
     null;
 
   if (exact) {
-    return exact;
+    return {
+      candidate: exact,
+      matchType: "exact",
+      score: 1,
+    };
   }
 
   const includesMatch =
@@ -158,7 +168,11 @@ function resolveProductCandidate(
     }) ?? null;
 
   if (includesMatch) {
-    return includesMatch;
+    return {
+      candidate: includesMatch,
+      matchType: "includes",
+      score: Math.max(0.75, getTokenOverlapScore(rawProductName, includesMatch.name)),
+    };
   }
 
   let bestCandidate: ProductCatalogCandidate | null = null;
@@ -174,10 +188,39 @@ function resolveProductCandidate(
   }
 
   if (bestScore >= 0.45) {
-    return bestCandidate;
+    return bestCandidate
+      ? {
+          candidate: bestCandidate,
+          matchType: "token",
+          score: bestScore,
+        }
+      : null;
   }
 
   return null;
+}
+
+function calibrateProductClassificationConfidence(
+  modelConfidence: ConfidenceLevel,
+  match: ProductCandidateMatch
+): ConfidenceLevel {
+  if (match.matchType === "exact") {
+    return modelConfidence;
+  }
+
+  if (match.matchType === "includes") {
+    return modelConfidence === "high" ? "medium" : modelConfidence;
+  }
+
+  if (match.score < 0.58) {
+    return "low";
+  }
+
+  if (match.score < 0.72 && modelConfidence === "high") {
+    return "medium";
+  }
+
+  return modelConfidence;
 }
 
 interface GeminiDetectionResult {
@@ -242,6 +285,10 @@ export interface AiModelProgressEvent {
   model?: string;
   attempt?: number;
   retryDelayMs?: number;
+}
+
+interface GeminiScanOptions {
+  skipQualityGate?: boolean;
 }
 
 const modelCooldownUntil = new Map<string, number>();
@@ -1199,14 +1246,17 @@ function mapStockInIngredientsToCatalog(
 
 export async function detectIngredientsWithGemini(
   file: File,
-  onProgress?: (event: AiModelProgressEvent) => void
+  onProgress?: (event: AiModelProgressEvent) => void,
+  options: GeminiScanOptions = {}
 ): Promise<GeminiDetectionResult> {
   assertOpenRouterApiKeyConfigured();
 
-  await assertImageQualityForAi(file);
-  onProgress?.({
-    step: "quality_check",
-  });
+  if (!options.skipQualityGate) {
+    await assertImageQualityForAi(file);
+    onProgress?.({
+      step: "quality_check",
+    });
+  }
   const responsePayload = await requestGeminiPayloadWithFallback(
     file,
     INVENTORY_ANALYSIS_PROMPT,
@@ -1222,7 +1272,8 @@ export async function detectIngredientsWithGemini(
 export async function detectStockInWithCatalogGemini(
   file: File,
   ingredientCatalog: StockInCatalogIngredient[],
-  onProgress?: (event: AiModelProgressEvent) => void
+  onProgress?: (event: AiModelProgressEvent) => void,
+  options: GeminiScanOptions = {}
 ): Promise<GeminiDetectionResult> {
   assertOpenRouterApiKeyConfigured();
 
@@ -1230,10 +1281,12 @@ export async function detectStockInWithCatalogGemini(
     throw new Error("Ingredient catalog is required for stock-in scanning.");
   }
 
-  await assertImageQualityForAi(file);
-  onProgress?.({
-    step: "quality_check",
-  });
+  if (!options.skipQualityGate) {
+    await assertImageQualityForAi(file);
+    onProgress?.({
+      step: "quality_check",
+    });
+  }
   const prompt = buildStockInCatalogPrompt(ingredientCatalog);
   const responsePayload = await requestGeminiPayloadWithFallback(
     file,
@@ -1277,7 +1330,8 @@ export async function detectStockInWithCatalogGemini(
 export async function classifyProductWithCatalogGemini(
   file: File,
   productCatalog: ProductCatalogCandidate[],
-  onProgress?: (event: AiModelProgressEvent) => void
+  onProgress?: (event: AiModelProgressEvent) => void,
+  options: GeminiScanOptions = {}
 ): Promise<GeminiProductClassificationResult> {
   assertOpenRouterApiKeyConfigured();
 
@@ -1285,10 +1339,12 @@ export async function classifyProductWithCatalogGemini(
     throw new Error("Product catalog is required for stock-out scanning.");
   }
 
-  await assertImageQualityForAi(file);
-  onProgress?.({
-    step: "quality_check",
-  });
+  if (!options.skipQualityGate) {
+    await assertImageQualityForAi(file);
+    onProgress?.({
+      step: "quality_check",
+    });
+  }
   const prompt = buildProductCatalogPrompt(productCatalog);
   const responsePayload = await requestGeminiPayloadWithFallback(
     file,
@@ -1308,6 +1364,11 @@ export async function classifyProductWithCatalogGemini(
     );
   }
 
+  const calibratedConfidence = calibrateProductClassificationConfidence(
+    toConfidenceLevel(parsed.confidence),
+    matchedProduct
+  );
+
   const quantityEstimate = clampQuantity(
     toPositiveNumber(parsed.quantity_estimate, 1),
     0.05,
@@ -1315,10 +1376,10 @@ export async function classifyProductWithCatalogGemini(
   );
 
   return {
-    product_id: matchedProduct.id,
-    product_name: matchedProduct.name,
-    category: matchedProduct.category,
-    confidence: toConfidenceLevel(parsed.confidence),
+    product_id: matchedProduct.candidate.id,
+    product_name: matchedProduct.candidate.name,
+    category: matchedProduct.candidate.category,
+    confidence: calibratedConfidence,
     quantity_estimate: Number(quantityEstimate.toFixed(3)),
     unit: "serving",
   };

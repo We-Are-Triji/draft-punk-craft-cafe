@@ -13,6 +13,8 @@ import {
   findSemanticCachedPayload,
   getCachedImageResult,
   hashImageFile,
+  removeCachedImageResult,
+  removeSemanticCachedPayload,
   upsertCachedImageResult,
   upsertSemanticCachedPayload,
 } from "@/lib/imageCache";
@@ -123,6 +125,35 @@ interface CachedStockOutSemanticPayload {
   confidence: ConfidenceLevel;
   quantity_estimate: number;
   unit: string;
+}
+
+interface ScanCacheControlOptions {
+  forceFresh?: boolean;
+  invalidateExistingCache?: boolean;
+}
+
+interface StockInScanCorrectionInput {
+  file: File;
+  catalog: StockInCatalogEntry[];
+  correction: {
+    item_name: string;
+    category: string;
+    quantity_estimate: number;
+    unit: string;
+    ingredients_to_deduct: IngredientDeduction[];
+  };
+}
+
+interface StockOutScanCorrectionInput {
+  file: File;
+  catalog: StockOutProductCatalogEntry[];
+  correction: {
+    product_id: string;
+    product_name: string;
+    category: string;
+    quantity_estimate: number;
+    unit: string;
+  };
 }
 
 interface ConfirmScanDeductionInput {
@@ -296,6 +327,14 @@ function normalizePositiveQuantity(value: unknown, fallbackValue: number): numbe
   }
 
   return Number(parsed.toFixed(3));
+}
+
+function normalizeCacheQuantity(value: number, fallbackValue: number): number {
+  if (!Number.isFinite(value)) {
+    return fallbackValue;
+  }
+
+  return Number(Math.max(0, value).toFixed(3));
 }
 
 function isIngredientDeductionRecord(value: unknown): value is IngredientDeduction {
@@ -1025,9 +1064,12 @@ export async function scanImageForDeduction(file: File): Promise<ScanDetectionRe
 export async function scanImageForStockInCatalog(
   file: File,
   catalog: StockInCatalogEntry[],
-  onProgress?: AiScanProgressHandler
+  onProgress?: AiScanProgressHandler,
+  options?: ScanCacheControlOptions
 ): Promise<ScanDetectionResult> {
   const normalizedCatalog = normalizeStockInCatalog(catalog);
+  const forceFresh = options?.forceFresh === true;
+  const invalidateExistingCache = options?.invalidateExistingCache === true;
 
   if (normalizedCatalog.length === 0) {
     throw new Error("Ingredient catalog is empty. Configure recipe ingredients first.");
@@ -1037,7 +1079,7 @@ export async function scanImageForStockInCatalog(
   const imageHash = await hashImageFile(file);
   reportScanProgress(onProgress, 24, "Computing scan signature...");
   const scope = getStockInSemanticScope(normalizedCatalog);
-  const taskKey = `${scope}:${imageHash}`;
+  const taskKey = `${scope}:${imageHash}:${forceFresh ? "fresh" : "default"}`;
   const inFlightScan = stockInScansInFlightByKey.get(taskKey);
 
   if (inFlightScan) {
@@ -1048,40 +1090,67 @@ export async function scanImageForStockInCatalog(
     let signature: string | null = null;
 
     try {
-      reportScanProgress(onProgress, 30, "Checking semantic cache...");
+      reportScanProgress(
+        onProgress,
+        30,
+        forceFresh ? "Dispute mode: bypassing semantic cache..." : "Checking semantic cache..."
+      );
       signature = await computeImageSemanticSignature(file);
 
-      const semanticCached = findSemanticCachedPayload<CachedStockInSemanticPayload>(
-        scope,
-        signature,
-        {
+      if (forceFresh && invalidateExistingCache) {
+        reportScanProgress(onProgress, 32, "Removing disputed cached result...");
+        removeSemanticCachedPayload(scope, signature, {
           maxHammingDistance: 3,
+        });
+      }
+
+      if (!forceFresh) {
+        const semanticCached = findSemanticCachedPayload<CachedStockInSemanticPayload>(
+          scope,
+          signature,
+          {
+            maxHammingDistance: 3,
+          }
+        );
+        const normalizedSemanticPayload = normalizeStockInSemanticPayload(
+          semanticCached
+        );
+        const cachedFileSize = normalizedSemanticPayload?.image_file_size ?? null;
+        const currentFileSize = file.size;
+        const hasComparableFileSize =
+          cachedFileSize !== null && cachedFileSize > 0 && currentFileSize > 0;
+        const fileSizeDeltaRatio = hasComparableFileSize
+          ? Math.abs(cachedFileSize - currentFileSize) /
+            Math.max(cachedFileSize, currentFileSize)
+          : 0;
+        const isFileSizeSimilar = !hasComparableFileSize || fileSizeDeltaRatio <= 0.14;
+
+        if (normalizedSemanticPayload && isFileSizeSimilar) {
+          const { image_file_size: _ignoredImageFileSize, ...cachedPayload } =
+            normalizedSemanticPayload;
+
+          reportScanProgress(onProgress, 100, "Loaded cached result.");
+          return {
+            image_hash: imageHash,
+            source: "cache" as const,
+            ...cachedPayload,
+          };
         }
-      );
-      const normalizedSemanticPayload = normalizeStockInSemanticPayload(semanticCached);
-      const cachedFileSize = normalizedSemanticPayload?.image_file_size ?? null;
-      const currentFileSize = file.size;
-      const hasComparableFileSize =
-        cachedFileSize !== null && cachedFileSize > 0 && currentFileSize > 0;
-      const fileSizeDeltaRatio = hasComparableFileSize
-        ? Math.abs(cachedFileSize - currentFileSize) /
-          Math.max(cachedFileSize, currentFileSize)
-        : 0;
-      const isFileSizeSimilar = !hasComparableFileSize || fileSizeDeltaRatio <= 0.14;
-
-      if (normalizedSemanticPayload && isFileSizeSimilar) {
-        const { image_file_size: _ignoredImageFileSize, ...cachedPayload } =
-          normalizedSemanticPayload;
-
-        reportScanProgress(onProgress, 100, "Loaded cached result.");
-        return {
-          image_hash: imageHash,
-          source: "cache" as const,
-          ...cachedPayload,
-        };
       }
     } catch {
       signature = null;
+    }
+
+    if (forceFresh && invalidateExistingCache) {
+      try {
+        await removeCachedImageResult(imageHash);
+      } catch (error) {
+        console.warn(
+          error instanceof Error
+            ? error.message
+            : "Image cache delete failed for unknown reason."
+        );
+      }
     }
 
     reportScanProgress(onProgress, 34, "Submitting image to AI...");
@@ -1091,6 +1160,9 @@ export async function scanImageForStockInCatalog(
       (event) => {
         const progress = toScanProgressFromModelEvent(event);
         reportScanProgress(onProgress, progress.percent, progress.message);
+      },
+      {
+        skipQualityGate: true,
       }
     );
     const scanResult: ScanDetectionResult = {
@@ -1155,9 +1227,12 @@ export async function scanImageForStockInCatalog(
 export async function scanImageForStockOutProductCatalog(
   file: File,
   catalog: StockOutProductCatalogEntry[],
-  onProgress?: AiScanProgressHandler
+  onProgress?: AiScanProgressHandler,
+  options?: ScanCacheControlOptions
 ): Promise<StockOutProductScanResult> {
   const normalizedCatalog = normalizeStockOutCatalog(catalog);
+  const forceFresh = options?.forceFresh === true;
+  const invalidateExistingCache = options?.invalidateExistingCache === true;
 
   if (normalizedCatalog.length === 0) {
     throw new Error("Product catalog is empty. Configure products first.");
@@ -1167,7 +1242,7 @@ export async function scanImageForStockOutProductCatalog(
   const imageHash = await hashImageFile(file);
   reportScanProgress(onProgress, 24, "Computing scan signature...");
   const scope = getStockOutSemanticScope(normalizedCatalog);
-  const taskKey = `${scope}:${imageHash}`;
+  const taskKey = `${scope}:${imageHash}:${forceFresh ? "fresh" : "default"}`;
   const inFlightScan = stockOutScansInFlightByKey.get(taskKey);
 
   if (inFlightScan) {
@@ -1178,30 +1253,55 @@ export async function scanImageForStockOutProductCatalog(
     let signature: string | null = null;
 
     try {
-      reportScanProgress(onProgress, 30, "Checking semantic cache...");
+      reportScanProgress(
+        onProgress,
+        30,
+        forceFresh ? "Dispute mode: bypassing semantic cache..." : "Checking semantic cache..."
+      );
       signature = await computeImageSemanticSignature(file);
 
-      const semanticCached = findSemanticCachedPayload<CachedStockOutSemanticPayload>(
-        scope,
-        signature,
-        {
+      if (forceFresh && invalidateExistingCache) {
+        reportScanProgress(onProgress, 32, "Removing disputed cached result...");
+        removeSemanticCachedPayload(scope, signature, {
           maxHammingDistance: 6,
-        }
-      );
-      const normalizedSemanticPayload = normalizeStockOutSemanticPayload(
-        semanticCached
-      );
+        });
+      }
 
-      if (normalizedSemanticPayload) {
-        reportScanProgress(onProgress, 100, "Loaded cached result.");
-        return {
-          image_hash: imageHash,
-          source: "cache" as const,
-          ...normalizedSemanticPayload,
-        };
+      if (!forceFresh) {
+        const semanticCached = findSemanticCachedPayload<CachedStockOutSemanticPayload>(
+          scope,
+          signature,
+          {
+            maxHammingDistance: 6,
+          }
+        );
+        const normalizedSemanticPayload = normalizeStockOutSemanticPayload(
+          semanticCached
+        );
+
+        if (normalizedSemanticPayload) {
+          reportScanProgress(onProgress, 100, "Loaded cached result.");
+          return {
+            image_hash: imageHash,
+            source: "cache" as const,
+            ...normalizedSemanticPayload,
+          };
+        }
       }
     } catch {
       signature = null;
+    }
+
+    if (forceFresh && invalidateExistingCache) {
+      try {
+        await removeCachedImageResult(imageHash);
+      } catch (error) {
+        console.warn(
+          error instanceof Error
+            ? error.message
+            : "Image cache delete failed for unknown reason."
+        );
+      }
     }
 
     reportScanProgress(onProgress, 34, "Submitting image to AI...");
@@ -1211,6 +1311,9 @@ export async function scanImageForStockOutProductCatalog(
       (event) => {
         const progress = toScanProgressFromModelEvent(event);
         reportScanProgress(onProgress, progress.percent, progress.message);
+      },
+      {
+        skipQualityGate: true,
       }
     );
     const scanResult: StockOutProductScanResult = {
@@ -1283,6 +1386,97 @@ export function getStockScanDiagnostics(): {
     stock_out_in_flight_scan_count: stockOutScansInFlightByKey.size,
     gemini: getGeminiUsageSnapshot(),
   };
+}
+
+export async function cacheStockInScanCorrection({
+  file,
+  catalog,
+  correction,
+}: StockInScanCorrectionInput): Promise<void> {
+  const normalizedCatalog = normalizeStockInCatalog(catalog);
+
+  if (normalizedCatalog.length === 0) {
+    return;
+  }
+
+  const scope = getStockInSemanticScope(normalizedCatalog);
+  const quantityEstimate = normalizeCacheQuantity(correction.quantity_estimate, 0);
+
+  try {
+    const signature = await computeImageSemanticSignature(file);
+
+    upsertSemanticCachedPayload(scope, signature, {
+      item_name: correction.item_name,
+      category: correction.category,
+      confidence: "high",
+      quantity_estimate: quantityEstimate,
+      unit: correction.unit,
+      ingredients_to_deduct: correction.ingredients_to_deduct,
+      image_file_size: file.size,
+    });
+  } catch {
+    // Non-blocking cache enrichment.
+  }
+
+  try {
+    const imageHash = await hashImageFile(file);
+
+    await upsertCachedImageResult({
+      image_hash: imageHash,
+      item_name: correction.item_name,
+      category: correction.category,
+      confidence: "high",
+      quantity_estimate: quantityEstimate,
+      unit: correction.unit,
+    });
+  } catch {
+    // Non-blocking cache enrichment.
+  }
+}
+
+export async function cacheStockOutScanCorrection({
+  file,
+  catalog,
+  correction,
+}: StockOutScanCorrectionInput): Promise<void> {
+  const normalizedCatalog = normalizeStockOutCatalog(catalog);
+
+  if (normalizedCatalog.length === 0) {
+    return;
+  }
+
+  const scope = getStockOutSemanticScope(normalizedCatalog);
+  const quantityEstimate = normalizeCacheQuantity(correction.quantity_estimate, 1);
+
+  try {
+    const signature = await computeImageSemanticSignature(file);
+
+    upsertSemanticCachedPayload(scope, signature, {
+      product_id: correction.product_id,
+      product_name: correction.product_name,
+      category: correction.category,
+      confidence: "high",
+      quantity_estimate: quantityEstimate,
+      unit: correction.unit,
+    });
+  } catch {
+    // Non-blocking cache enrichment.
+  }
+
+  try {
+    const imageHash = await hashImageFile(file);
+
+    await upsertCachedImageResult({
+      image_hash: imageHash,
+      item_name: correction.product_name,
+      category: correction.category,
+      confidence: "high",
+      quantity_estimate: quantityEstimate,
+      unit: correction.unit,
+    });
+  } catch {
+    // Non-blocking cache enrichment.
+  }
 }
 
 export async function confirmScanDeduction({

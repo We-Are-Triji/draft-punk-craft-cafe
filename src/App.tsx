@@ -12,24 +12,10 @@ function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
-  const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState("");
   const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     const supabase = getSupabaseClient();
-
-    const extractUserInfo = (session: { user: { email?: string; user_metadata?: Record<string, unknown> } } | null) => {
-      if (!session) {
-        setUserName("");
-        setUserEmail("");
-        return;
-      }
-      setUserEmail(session.user.email ?? "");
-      const meta = session.user.user_metadata;
-      const name = (meta?.full_name ?? meta?.name ?? "") as string;
-      setUserName(name);
-    };
 
     const checkSession = async () => {
       const { data, error } = await supabase.auth.getSession();
@@ -39,7 +25,6 @@ function App() {
         setLoggedIn(false);
       } else {
         setLoggedIn(Boolean(data.session));
-        extractUserInfo(data.session);
       }
 
       setAuthReady(true);
@@ -51,7 +36,6 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setLoggedIn(Boolean(session));
-      extractUserInfo(session);
     });
 
     return () => {

@@ -14,6 +14,17 @@ interface ImageQualityThresholds {
   minHeight: number;
 }
 
+export interface ImageQualityGateAssessment {
+  report: ImageQualityReport;
+  checks: Array<{
+    key: "size" | "brightness" | "contrast" | "sharpness";
+    label: string;
+    passed: boolean;
+    value: string;
+  }>;
+  failureMessage: string | null;
+}
+
 const DEFAULT_THRESHOLDS: ImageQualityThresholds = {
   minBrightness: 28,
   minContrast: 18,
@@ -122,37 +133,82 @@ export async function analyzeImageQuality(file: File): Promise<ImageQualityRepor
   };
 }
 
-export async function assertImageQualityForAi(
+function getImageQualityFailureMessage(
+  report: ImageQualityReport,
+  thresholds: ImageQualityThresholds
+): string | null {
+  if (report.width < thresholds.minWidth || report.height < thresholds.minHeight) {
+    return `Image is too small for reliable scanning (${report.width}x${report.height}). Use a clearer image.`;
+  }
+
+  if (report.brightness < thresholds.minBrightness) {
+    return "Image is too dark. Increase lighting and try again.";
+  }
+
+  if (report.contrast < thresholds.minContrast) {
+    return "Image contrast is too low. Ensure labels and product edges are visible.";
+  }
+
+  if (report.sharpness < thresholds.minSharpness) {
+    return "Image appears blurry. Hold steady and retake the photo.";
+  }
+
+  return null;
+}
+
+export async function evaluateImageQualityForAi(
   file: File,
   thresholds: Partial<ImageQualityThresholds> = {}
-): Promise<void> {
+): Promise<ImageQualityGateAssessment> {
   const resolvedThresholds: ImageQualityThresholds = {
     ...DEFAULT_THRESHOLDS,
     ...thresholds,
   };
 
   const report = await analyzeImageQuality(file);
+  const checks: ImageQualityGateAssessment["checks"] = [
+    {
+      key: "size",
+      label: "Dimensions",
+      passed:
+        report.width >= resolvedThresholds.minWidth &&
+        report.height >= resolvedThresholds.minHeight,
+      value: `${report.width}x${report.height}`,
+    },
+    {
+      key: "brightness",
+      label: "Brightness",
+      passed: report.brightness >= resolvedThresholds.minBrightness,
+      value: `${report.brightness}`,
+    },
+    {
+      key: "contrast",
+      label: "Contrast",
+      passed: report.contrast >= resolvedThresholds.minContrast,
+      value: `${report.contrast}`,
+    },
+    {
+      key: "sharpness",
+      label: "Sharpness",
+      passed: report.sharpness >= resolvedThresholds.minSharpness,
+      value: `${report.sharpness}`,
+    },
+  ];
 
-  if (
-    report.width < resolvedThresholds.minWidth ||
-    report.height < resolvedThresholds.minHeight
-  ) {
-    throw new Error(
-      `Image is too small for reliable scanning (${report.width}x${report.height}). Use a clearer image.`
-    );
-  }
+  return {
+    report,
+    checks,
+    failureMessage: getImageQualityFailureMessage(report, resolvedThresholds),
+  };
+}
 
-  if (report.brightness < resolvedThresholds.minBrightness) {
-    throw new Error("Image is too dark. Increase lighting and try again.");
-  }
+export async function assertImageQualityForAi(
+  file: File,
+  thresholds: Partial<ImageQualityThresholds> = {}
+): Promise<void> {
+  const assessment = await evaluateImageQualityForAi(file, thresholds);
 
-  if (report.contrast < resolvedThresholds.minContrast) {
-    throw new Error(
-      "Image contrast is too low. Ensure labels and product edges are visible."
-    );
-  }
-
-  if (report.sharpness < resolvedThresholds.minSharpness) {
-    throw new Error("Image appears blurry. Hold steady and retake the photo.");
+  if (assessment.failureMessage) {
+    throw new Error(assessment.failureMessage);
   }
 }
