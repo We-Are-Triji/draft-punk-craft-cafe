@@ -10,6 +10,24 @@ function toPositiveInteger(value: string | undefined, fallbackValue: number): nu
   return Math.trunc(parsed);
 }
 
+function toBoolean(value: string | undefined, fallbackValue: boolean): boolean {
+  if (value === undefined) {
+    return fallbackValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return fallbackValue;
+}
+
 function toModelList(value: string | undefined): string[] {
   if (!value) {
     return [];
@@ -32,7 +50,7 @@ export const appEnv = {
   openRouterModel:
     runtimeEnv.VITE_OPENROUTER_MODEL ??
     runtimeEnv.VITE_GEMINI_MODEL ??
-    "qwen/qwen2.5-vl-72b-instruct:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
   openRouterFallbackModels: toModelList(
     runtimeEnv.VITE_OPENROUTER_MODEL_FALLBACKS ??
       runtimeEnv.VITE_GEMINI_MODEL_FALLBACKS
@@ -50,6 +68,14 @@ export const appEnv = {
   openRouterMaxRetries: toPositiveInteger(
     runtimeEnv.VITE_OPENROUTER_MAX_RETRIES ?? runtimeEnv.VITE_GEMINI_MAX_RETRIES,
     1
+  ),
+  openRouterMaxOutputTokens: toPositiveInteger(
+    runtimeEnv.VITE_OPENROUTER_MAX_OUTPUT_TOKENS,
+    320
+  ),
+  openRouterForceJsonResponse: toBoolean(
+    runtimeEnv.VITE_OPENROUTER_FORCE_JSON_RESPONSE,
+    true
   ),
   openRouterCooldownMs: toPositiveInteger(
     runtimeEnv.VITE_OPENROUTER_COOLDOWN_MS ?? runtimeEnv.VITE_GEMINI_COOLDOWN_MS,

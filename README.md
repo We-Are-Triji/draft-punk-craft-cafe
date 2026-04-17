@@ -24,13 +24,15 @@ Required variables:
 Recommended free-tier model setup:
 
 - `VITE_OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free`
-- `VITE_OPENROUTER_MODEL_FALLBACKS=`
-- `VITE_OPENROUTER_MAX_MODELS_PER_REQUEST=1`
+- `VITE_OPENROUTER_MODEL_FALLBACKS=google/gemma-3-12b-it:free,google/gemma-3-27b-it:free,google/gemma-4-26b-a4b-it:free`
+- `VITE_OPENROUTER_MAX_MODELS_PER_REQUEST=2`
 - `VITE_OPENROUTER_MAX_RETRIES=1`
+- `VITE_OPENROUTER_MAX_OUTPUT_TOKENS=320`
+- `VITE_OPENROUTER_FORCE_JSON_RESPONSE=true`
 
 Notes:
 
-- The app supports fallback model lists and cooldown/retry throttling in `.env.example`.
+- The app supports fallback model lists, output-token caps, and cooldown/retry throttling in `.env.example`.
 - Model availability can change on OpenRouter; if a model is unavailable, swap to another currently listed `:free` vision model in your OpenRouter dashboard.
 
 ## Supabase Schema

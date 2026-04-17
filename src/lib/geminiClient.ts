@@ -224,6 +224,22 @@ export interface GeminiUsageSnapshot {
   model_cooldowns: Record<string, number>;
 }
 
+export type AiModelProgressStep =
+  | "quality_check"
+  | "encoding"
+  | "requesting"
+  | "retry_wait"
+  | "fallback_model"
+  | "response_received"
+  | "parsing";
+
+export interface AiModelProgressEvent {
+  step: AiModelProgressStep;
+  model?: string;
+  attempt?: number;
+  retryDelayMs?: number;
+}
+
 const modelCooldownUntil = new Map<string, number>();
 let lastRequestStartAt = 0;
 let requestQueueTail: Promise<void> = Promise.resolve();
@@ -547,11 +563,24 @@ function isModelUnavailableError(error: GeminiRequestErrorShape): boolean {
   );
 }
 
+function isUnsupportedJsonResponseModeError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+
+  return (
+    normalized.includes("response_format") ||
+    normalized.includes("json mode") ||
+    normalized.includes("json_object") ||
+    normalized.includes("unsupported parameter")
+  );
+}
+
 async function requestGeminiResponsePayload(
   file: File,
   imageBase64: string,
   model: string,
-  promptText: string
+  promptText: string,
+  onProgress?: (event: AiModelProgressEvent) => void,
+  attemptNumber = 1
 ): Promise<unknown> {
   const endpoint = `${appEnv.openRouterApiBase.replace(/\/$/, "")}/chat/completions`;
   const imageMimeType = file.type || "image/jpeg";
@@ -568,40 +597,82 @@ async function requestGeminiResponsePayload(
     headers["X-Title"] = appEnv.openRouterSiteName.trim();
   }
 
+  const baseRequestBody = {
+    model,
+    temperature: 0.1,
+    max_tokens: appEnv.openRouterMaxOutputTokens,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: promptText },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${imageMimeType};base64,${imageBase64}`,
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const sendRequest = async (
+    forceJsonResponse: boolean
+  ): Promise<{ response: Response; payload: unknown }> => {
+    const requestBody = forceJsonResponse
+      ? {
+          ...baseRequestBody,
+          response_format: {
+            type: "json_object",
+          },
+        }
+      : baseRequestBody;
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+
+    let payload: unknown = null;
+
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    return {
+      response,
+      payload,
+    };
+  };
+
   await waitForRequestSlot();
+  onProgress?.({
+    step: "requesting",
+    model,
+    attempt: attemptNumber,
+  });
 
   geminiUsageState.total_network_attempts += 1;
   geminiUsageState.last_model = model;
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      temperature: 0.1,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: promptText },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${imageMimeType};base64,${imageBase64}`,
-              },
-            },
-          ],
-        },
-      ],
-    }),
-  });
+  let forceJsonResponse = appEnv.openRouterForceJsonResponse;
+  let { response, payload: responsePayload } = await sendRequest(forceJsonResponse);
 
-  let responsePayload: unknown = null;
+  if (!response.ok && forceJsonResponse) {
+    const errorMessageWithJsonMode =
+      getOpenRouterErrorMessage(responsePayload) ?? "";
 
-  try {
-    responsePayload = await response.json();
-  } catch {
-    responsePayload = null;
+    if (
+      response.status === 400 &&
+      isUnsupportedJsonResponseModeError(errorMessageWithJsonMode)
+    ) {
+      forceJsonResponse = false;
+      ({ response, payload: responsePayload } = await sendRequest(forceJsonResponse));
+    }
   }
 
   if (!response.ok) {
@@ -623,6 +694,12 @@ async function requestGeminiResponsePayload(
       model,
     };
   }
+
+  onProgress?.({
+    step: "response_received",
+    model,
+    attempt: attemptNumber,
+  });
 
   return responsePayload;
 }
@@ -685,10 +762,14 @@ function parseGeminiPayloadAsRecord(payload: unknown): Record<string, unknown> {
 
 async function requestGeminiPayloadWithFallback(
   file: File,
-  promptText: string
+  promptText: string,
+  onProgress?: (event: AiModelProgressEvent) => void
 ): Promise<unknown> {
   geminiUsageState.total_requests += 1;
 
+  onProgress?.({
+    step: "encoding",
+  });
   const imageBase64 = arrayBufferToBase64(await file.arrayBuffer());
   const candidateModels = getCandidateModels();
   let availableModels = candidateModels.filter(
@@ -720,7 +801,9 @@ async function requestGeminiPayloadWithFallback(
           file,
           imageBase64,
           model,
-          promptText
+          promptText,
+          onProgress,
+          attempt + 1
         );
 
         geminiUsageState.last_error = null;
@@ -736,6 +819,10 @@ async function requestGeminiPayloadWithFallback(
           if (nextFallbackModel && !modelsToTry.includes(nextFallbackModel)) {
             modelsToTry.push(nextFallbackModel);
             overflowModelIndex += 1;
+            onProgress?.({
+              step: "fallback_model",
+              model: nextFallbackModel,
+            });
           }
         }
 
@@ -747,6 +834,12 @@ async function requestGeminiPayloadWithFallback(
         if (canRetry) {
           geminiUsageState.total_retries += 1;
           const retryDelayMs = Math.min(4_000, 600 * (attempt + 1));
+          onProgress?.({
+            step: "retry_wait",
+            model,
+            attempt: attempt + 1,
+            retryDelayMs,
+          });
           await delay(retryDelayMs);
           continue;
         }
@@ -865,22 +958,31 @@ function mapStockInIngredientsToCatalog(
 }
 
 export async function detectIngredientsWithGemini(
-  file: File
+  file: File,
+  onProgress?: (event: AiModelProgressEvent) => void
 ): Promise<GeminiDetectionResult> {
   assertOpenRouterApiKeyConfigured();
 
   await assertImageQualityForAi(file);
+  onProgress?.({
+    step: "quality_check",
+  });
   const responsePayload = await requestGeminiPayloadWithFallback(
     file,
-    INVENTORY_ANALYSIS_PROMPT
+    INVENTORY_ANALYSIS_PROMPT,
+    onProgress
   );
+  onProgress?.({
+    step: "parsing",
+  });
 
   return parseGeminiResponsePayload(responsePayload);
 }
 
 export async function detectStockInWithCatalogGemini(
   file: File,
-  ingredientCatalog: StockInCatalogIngredient[]
+  ingredientCatalog: StockInCatalogIngredient[],
+  onProgress?: (event: AiModelProgressEvent) => void
 ): Promise<GeminiDetectionResult> {
   assertOpenRouterApiKeyConfigured();
 
@@ -889,8 +991,18 @@ export async function detectStockInWithCatalogGemini(
   }
 
   await assertImageQualityForAi(file);
+  onProgress?.({
+    step: "quality_check",
+  });
   const prompt = buildStockInCatalogPrompt(ingredientCatalog);
-  const responsePayload = await requestGeminiPayloadWithFallback(file, prompt);
+  const responsePayload = await requestGeminiPayloadWithFallback(
+    file,
+    prompt,
+    onProgress
+  );
+  onProgress?.({
+    step: "parsing",
+  });
   const parsed = parseGeminiPayloadAsRecord(responsePayload);
   const quantityEstimate = clampQuantity(
     toPositiveNumber(parsed.quantity_estimate, 1),
@@ -922,7 +1034,8 @@ export async function detectStockInWithCatalogGemini(
 
 export async function classifyProductWithCatalogGemini(
   file: File,
-  productCatalog: ProductCatalogCandidate[]
+  productCatalog: ProductCatalogCandidate[],
+  onProgress?: (event: AiModelProgressEvent) => void
 ): Promise<GeminiProductClassificationResult> {
   assertOpenRouterApiKeyConfigured();
 
@@ -931,8 +1044,18 @@ export async function classifyProductWithCatalogGemini(
   }
 
   await assertImageQualityForAi(file);
+  onProgress?.({
+    step: "quality_check",
+  });
   const prompt = buildProductCatalogPrompt(productCatalog);
-  const responsePayload = await requestGeminiPayloadWithFallback(file, prompt);
+  const responsePayload = await requestGeminiPayloadWithFallback(
+    file,
+    prompt,
+    onProgress
+  );
+  onProgress?.({
+    step: "parsing",
+  });
   const parsed = parseGeminiPayloadAsRecord(responsePayload);
   const rawProductName = toNonEmptyString(parsed.product_name, "");
   const matchedProduct = resolveProductCandidate(rawProductName, productCatalog);

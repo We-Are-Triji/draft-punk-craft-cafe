@@ -4,6 +4,7 @@ import {
   detectIngredientsWithGemini,
   detectStockInWithCatalogGemini,
   getGeminiUsageSnapshot,
+  type AiModelProgressEvent,
   type ProductCatalogCandidate,
   type StockInCatalogIngredient,
 } from "@/lib/geminiClient";
@@ -98,6 +99,13 @@ export interface StockOutProductScanResult {
   unit: string;
 }
 
+export interface AiScanProgressUpdate {
+  percent: number;
+  message: string;
+}
+
+type AiScanProgressHandler = (progress: AiScanProgressUpdate) => void;
+
 interface CachedStockInSemanticPayload {
   item_name: string;
   category: string;
@@ -141,6 +149,75 @@ export interface InventoryItemMutationInput {
   unit: string;
   current_stock: number;
   reorder_threshold: number;
+}
+
+function reportScanProgress(
+  onProgress: AiScanProgressHandler | undefined,
+  percent: number,
+  message: string
+): void {
+  if (!onProgress) {
+    return;
+  }
+
+  onProgress({
+    percent: Math.max(0, Math.min(100, Number(percent.toFixed(1)))),
+    message,
+  });
+}
+
+function toScanProgressFromModelEvent(
+  event: AiModelProgressEvent
+): AiScanProgressUpdate {
+  switch (event.step) {
+    case "quality_check":
+      return {
+        percent: 36,
+        message: "Checking image quality...",
+      };
+    case "encoding":
+      return {
+        percent: 48,
+        message: "Preparing image for AI analysis...",
+      };
+    case "requesting":
+      return {
+        percent: 62,
+        message: event.model
+          ? `Analyzing with ${event.model}${event.attempt ? ` (attempt ${event.attempt})` : ""}...`
+          : "Analyzing image with AI...",
+      };
+    case "retry_wait": {
+      const retrySeconds = Math.max(1, Math.round((event.retryDelayMs ?? 1000) / 1000));
+
+      return {
+        percent: 68,
+        message: `Retrying AI request in ${retrySeconds}s...`,
+      };
+    }
+    case "fallback_model":
+      return {
+        percent: 72,
+        message: event.model
+          ? `Switching to fallback model: ${event.model}`
+          : "Switching to fallback model...",
+      };
+    case "response_received":
+      return {
+        percent: 88,
+        message: "AI response received. Finalizing...",
+      };
+    case "parsing":
+      return {
+        percent: 94,
+        message: "Parsing AI output...",
+      };
+    default:
+      return {
+        percent: 70,
+        message: "Processing AI scan...",
+      };
+  }
 }
 
 function normalizeDishName(value: string): string {
@@ -933,7 +1010,8 @@ export async function scanImageForDeduction(file: File): Promise<ScanDetectionRe
 
 export async function scanImageForStockInCatalog(
   file: File,
-  catalog: StockInCatalogEntry[]
+  catalog: StockInCatalogEntry[],
+  onProgress?: AiScanProgressHandler
 ): Promise<ScanDetectionResult> {
   const normalizedCatalog = normalizeStockInCatalog(catalog);
 
@@ -941,7 +1019,9 @@ export async function scanImageForStockInCatalog(
     throw new Error("Ingredient catalog is empty. Configure recipe ingredients first.");
   }
 
+  reportScanProgress(onProgress, 14, "Preparing scan context...");
   const imageHash = await hashImageFile(file);
+  reportScanProgress(onProgress, 24, "Computing scan signature...");
   const scope = getStockInSemanticScope(normalizedCatalog);
   const taskKey = `${scope}:${imageHash}`;
   const inFlightScan = stockInScansInFlightByKey.get(taskKey);
@@ -954,6 +1034,7 @@ export async function scanImageForStockInCatalog(
     let signature: string | null = null;
 
     try {
+      reportScanProgress(onProgress, 30, "Checking semantic cache...");
       signature = await computeImageSemanticSignature(file);
 
       const semanticCached = findSemanticCachedPayload<CachedStockInSemanticPayload>(
@@ -966,6 +1047,7 @@ export async function scanImageForStockInCatalog(
       const normalizedSemanticPayload = normalizeStockInSemanticPayload(semanticCached);
 
       if (normalizedSemanticPayload) {
+        reportScanProgress(onProgress, 100, "Loaded cached result.");
         return {
           image_hash: imageHash,
           source: "cache" as const,
@@ -976,7 +1058,15 @@ export async function scanImageForStockInCatalog(
       signature = null;
     }
 
-    const detectedResult = await detectStockInWithCatalogGemini(file, normalizedCatalog);
+    reportScanProgress(onProgress, 34, "Submitting image to AI...");
+    const detectedResult = await detectStockInWithCatalogGemini(
+      file,
+      normalizedCatalog,
+      (event) => {
+        const progress = toScanProgressFromModelEvent(event);
+        reportScanProgress(onProgress, progress.percent, progress.message);
+      }
+    );
     const scanResult: ScanDetectionResult = {
       image_hash: imageHash,
       item_name: detectedResult.item_name,
@@ -1000,6 +1090,7 @@ export async function scanImageForStockInCatalog(
     }
 
     try {
+      reportScanProgress(onProgress, 97, "Saving scan cache...");
       await upsertCachedImageResult({
         image_hash: imageHash,
         item_name: scanResult.item_name,
@@ -1015,6 +1106,8 @@ export async function scanImageForStockInCatalog(
           : "Image cache write failed for unknown reason."
       );
     }
+
+    reportScanProgress(onProgress, 100, "Scan complete.");
 
     return scanResult;
   })();
@@ -1034,7 +1127,8 @@ export async function scanImageForStockInCatalog(
 
 export async function scanImageForStockOutProductCatalog(
   file: File,
-  catalog: StockOutProductCatalogEntry[]
+  catalog: StockOutProductCatalogEntry[],
+  onProgress?: AiScanProgressHandler
 ): Promise<StockOutProductScanResult> {
   const normalizedCatalog = normalizeStockOutCatalog(catalog);
 
@@ -1042,7 +1136,9 @@ export async function scanImageForStockOutProductCatalog(
     throw new Error("Product catalog is empty. Configure products first.");
   }
 
+  reportScanProgress(onProgress, 14, "Preparing scan context...");
   const imageHash = await hashImageFile(file);
+  reportScanProgress(onProgress, 24, "Computing scan signature...");
   const scope = getStockOutSemanticScope(normalizedCatalog);
   const taskKey = `${scope}:${imageHash}`;
   const inFlightScan = stockOutScansInFlightByKey.get(taskKey);
@@ -1055,6 +1151,7 @@ export async function scanImageForStockOutProductCatalog(
     let signature: string | null = null;
 
     try {
+      reportScanProgress(onProgress, 30, "Checking semantic cache...");
       signature = await computeImageSemanticSignature(file);
 
       const semanticCached = findSemanticCachedPayload<CachedStockOutSemanticPayload>(
@@ -1069,6 +1166,7 @@ export async function scanImageForStockOutProductCatalog(
       );
 
       if (normalizedSemanticPayload) {
+        reportScanProgress(onProgress, 100, "Loaded cached result.");
         return {
           image_hash: imageHash,
           source: "cache" as const,
@@ -1079,9 +1177,14 @@ export async function scanImageForStockOutProductCatalog(
       signature = null;
     }
 
+    reportScanProgress(onProgress, 34, "Submitting image to AI...");
     const classified = await classifyProductWithCatalogGemini(
       file,
-      normalizedCatalog
+      normalizedCatalog,
+      (event) => {
+        const progress = toScanProgressFromModelEvent(event);
+        reportScanProgress(onProgress, progress.percent, progress.message);
+      }
     );
     const scanResult: StockOutProductScanResult = {
       image_hash: imageHash,
@@ -1106,6 +1209,7 @@ export async function scanImageForStockOutProductCatalog(
     }
 
     try {
+      reportScanProgress(onProgress, 97, "Saving scan cache...");
       await upsertCachedImageResult({
         image_hash: imageHash,
         item_name: scanResult.product_name,
@@ -1121,6 +1225,8 @@ export async function scanImageForStockOutProductCatalog(
           : "Image cache write failed for unknown reason."
       );
     }
+
+    reportScanProgress(onProgress, 100, "Scan complete.");
 
     return scanResult;
   })();

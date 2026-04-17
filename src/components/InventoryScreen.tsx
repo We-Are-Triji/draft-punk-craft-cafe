@@ -17,6 +17,7 @@ import {
   confirmScanDeduction,
   recordManualStockIn,
   scanImageForStockInCatalog,
+  type AiScanProgressUpdate,
 } from "@/lib/inventoryService";
 import { normalizeImageForAiScan } from "@/lib/imageUpload";
 import type {
@@ -79,6 +80,10 @@ interface AiLineDraft {
   quantity: string;
 }
 
+interface AiScanProgressState extends AiScanProgressUpdate {
+  started_at: number;
+}
+
 function normalizeValue(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -93,6 +98,32 @@ function formatNumber(value: number): string {
   }
 
   return String(Number(value.toFixed(3)));
+}
+
+function mergeAiScanProgress(
+  previous: AiScanProgressState | null,
+  incoming: AiScanProgressUpdate
+): AiScanProgressState {
+  const startedAt = previous?.started_at ?? Date.now();
+
+  return {
+    percent: Math.max(previous?.percent ?? 0, incoming.percent),
+    message: incoming.message,
+    started_at: startedAt,
+  };
+}
+
+function formatElapsedMs(milliseconds: number): string {
+  const totalSeconds = Math.max(0, milliseconds / 1000);
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(1)}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = Math.floor(totalSeconds % 60);
+
+  return `${minutes}m ${remainingSeconds}s`;
 }
 
 function parsePositiveNumber(value: string, fieldLabel: string): number {
@@ -265,11 +296,14 @@ export function InventoryScreen() {
 
   const aiFileInputRef = useRef<HTMLInputElement | null>(null);
   const aiImagePreparingRef = useRef(false);
+  const aiProgressClearTimeoutRef = useRef<number | null>(null);
   const [aiImage, setAiImage] = useState<File | null>(null);
   const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
   const [isAiDragging, setIsAiDragging] = useState(false);
   const [aiScanResult, setAiScanResult] = useState<ScanDetectionResult | null>(null);
   const [aiLines, setAiLines] = useState<AiLineDraft[]>([]);
+  const [aiScanProgress, setAiScanProgress] = useState<AiScanProgressState | null>(null);
+  const [aiScanClockMs, setAiScanClockMs] = useState(() => Date.now());
   const [isAiImagePreparing, setIsAiImagePreparing] = useState(false);
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [isAiConfirming, setIsAiConfirming] = useState(false);
@@ -369,8 +403,26 @@ export function InventoryScreen() {
       if (aiPreviewUrl) {
         URL.revokeObjectURL(aiPreviewUrl);
       }
+
+      if (aiProgressClearTimeoutRef.current !== null) {
+        window.clearTimeout(aiProgressClearTimeoutRef.current);
+      }
     };
   }, [aiPreviewUrl]);
+
+  useEffect(() => {
+    if (!isAiScanning) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setAiScanClockMs(Date.now());
+    }, 200);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isAiScanning]);
 
   const paginatedIngredients = useMemo(
     () =>
@@ -396,6 +448,7 @@ export function InventoryScreen() {
   const resetAiState = () => {
     aiImagePreparingRef.current = false;
     setIsAiImagePreparing(false);
+    setAiScanProgress(null);
     setAiImage(null);
     setAiScanResult(null);
     setAiLines([]);
@@ -407,6 +460,11 @@ export function InventoryScreen() {
 
       return null;
     });
+
+    if (aiProgressClearTimeoutRef.current !== null) {
+      window.clearTimeout(aiProgressClearTimeoutRef.current);
+      aiProgressClearTimeoutRef.current = null;
+    }
   };
 
   const openStockInSelector = () => {
@@ -534,18 +592,37 @@ export function InventoryScreen() {
 
     setActionError(null);
     setActionSuccess(null);
+    if (aiProgressClearTimeoutRef.current !== null) {
+      window.clearTimeout(aiProgressClearTimeoutRef.current);
+      aiProgressClearTimeoutRef.current = null;
+    }
+    setAiScanProgress({
+      percent: 8,
+      message: "Preparing scan...",
+      started_at: Date.now(),
+    });
     setIsAiScanning(true);
 
     try {
       const detectedResult = await scanImageForStockInCatalog(
         aiImage,
-        recipeIngredientCatalog
+        recipeIngredientCatalog,
+        (progress) => {
+          setAiScanProgress((previous) => mergeAiScanProgress(previous, progress));
+        }
+      );
+      setAiScanProgress((previous) =>
+        mergeAiScanProgress(previous, {
+          percent: 100,
+          message: "Scan complete.",
+        })
       );
       setAiScanResult(detectedResult);
       setAiLines(
         toAiLineDrafts(detectedResult.ingredients_to_deduct, recipeIngredientCatalog)
       );
     } catch (scanError) {
+      setAiScanProgress(null);
       setActionError(
         scanError instanceof Error
           ? scanError.message
@@ -553,6 +630,10 @@ export function InventoryScreen() {
       );
     } finally {
       setIsAiScanning(false);
+      aiProgressClearTimeoutRef.current = window.setTimeout(() => {
+        setAiScanProgress(null);
+        aiProgressClearTimeoutRef.current = null;
+      }, 1200);
     }
   };
 
@@ -1027,6 +1108,30 @@ export function InventoryScreen() {
                       <span className="text-xs text-gray-500 dark:text-muted-foreground">{aiImage.name}</span>
                     ) : null}
                   </div>
+
+                  {isAiScanning && aiScanProgress ? (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-gray-700">
+                          {aiScanProgress.message}
+                        </p>
+                        <p className="text-xs font-bold text-gray-500">
+                          {Math.round(aiScanProgress.percent)}%
+                        </p>
+                      </div>
+                      <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                        <div
+                          className="h-full bg-[#3E2723] transition-[width] duration-500"
+                          style={{
+                            width: `${Math.max(6, Math.round(aiScanProgress.percent))}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Elapsed {formatElapsedMs(aiScanClockMs - aiScanProgress.started_at)}
+                      </p>
+                    </div>
+                  ) : null}
 
                   {aiScanResult ? (
                     <div className="space-y-4">
