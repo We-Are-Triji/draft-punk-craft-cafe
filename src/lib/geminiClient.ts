@@ -1,4 +1,5 @@
 import { appEnv, assertRuntimeEnv } from "@/lib/env";
+import { assertImageQualityForAi } from "@/lib/imageQuality";
 import type { ConfidenceLevel, IngredientDeduction } from "@/types/inventory";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -27,6 +28,156 @@ const INVENTORY_ANALYSIS_PROMPT = [
   "- Use positive numbers for quantity_estimate and ingredient quantity.",
 ].join("\n");
 
+function buildStockInCatalogPrompt(
+  ingredients: StockInCatalogIngredient[]
+): string {
+  const catalogText = ingredients
+    .map(
+      (ingredient, index) =>
+        `${index + 1}. ${ingredient.name} | ${ingredient.unit} | ${ingredient.category}`
+    )
+    .join("\n");
+
+  return [
+    "You are an inventory stock-in assistant for a craft cafe.",
+    "Identify visible ingredients and quantities from this image.",
+    "You MUST ONLY return ingredients from the provided catalog.",
+    "Return ONLY a JSON object in this exact format:",
+    "{",
+    '  "item_name": "string",',
+    '  "confidence": "high" | "medium" | "low",',
+    '  "quantity_estimate": number,',
+    '  "unit": "string",',
+    '  "ingredients_to_deduct": [',
+    "    {",
+    '      "item_name": "string",',
+    '      "category": "string",',
+    '      "quantity": number,',
+    '      "unit": "string"',
+    "    }",
+    "  ]",
+    "}",
+    "Rules:",
+    "- Do not invent any ingredient outside the catalog.",
+    "- item_name in ingredients_to_deduct must exactly match one catalog ingredient name.",
+    "- unit in ingredients_to_deduct must exactly match catalog unit for that ingredient.",
+    "- Use positive quantities only.",
+    "- If uncertain, return lower confidence and fewer lines, never hallucinate.",
+    "Ingredient Catalog:",
+    catalogText,
+  ].join("\n");
+}
+
+function buildProductCatalogPrompt(products: ProductCatalogCandidate[]): string {
+  const productList = products
+    .map(
+      (product, index) =>
+        `${index + 1}. ${product.name} | ${product.category}${product.description ? ` | ${product.description}` : ""}`
+    )
+    .join("\n");
+
+  return [
+    "You are a product recognition assistant for stock-out transactions.",
+    "Identify which ONE product from the product catalog is shown in the image.",
+    "Return ONLY a JSON object in this exact format:",
+    "{",
+    '  "product_name": "string",',
+    '  "confidence": "high" | "medium" | "low",',
+    '  "quantity_estimate": number',
+    "}",
+    "Rules:",
+    "- product_name MUST be exactly one of the catalog names.",
+    "- Never output product names not in the catalog.",
+    "- quantity_estimate must be a positive number representing sold units/servings.",
+    "- If uncertain, pick the closest valid catalog product and reduce confidence.",
+    "Product Catalog:",
+    productList,
+  ].join("\n");
+}
+
+function clampQuantity(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function tokenize(value: string): string[] {
+  return normalizeText(value)
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0);
+}
+
+function getTokenOverlapScore(left: string, right: string): number {
+  const leftTokens = new Set(tokenize(left));
+  const rightTokens = new Set(tokenize(right));
+
+  if (leftTokens.size === 0 || rightTokens.size === 0) {
+    return 0;
+  }
+
+  let overlap = 0;
+
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+
+  return overlap / Math.max(leftTokens.size, rightTokens.size);
+}
+
+function resolveProductCandidate(
+  rawProductName: string,
+  candidates: ProductCatalogCandidate[]
+): ProductCatalogCandidate | null {
+  const normalizedRaw = normalizeText(rawProductName);
+
+  if (!normalizedRaw) {
+    return null;
+  }
+
+  const exact =
+    candidates.find((candidate) => normalizeText(candidate.name) === normalizedRaw) ??
+    null;
+
+  if (exact) {
+    return exact;
+  }
+
+  const includesMatch =
+    candidates.find((candidate) => {
+      const normalizedCandidate = normalizeText(candidate.name);
+      return (
+        normalizedCandidate.includes(normalizedRaw) ||
+        normalizedRaw.includes(normalizedCandidate)
+      );
+    }) ?? null;
+
+  if (includesMatch) {
+    return includesMatch;
+  }
+
+  let bestCandidate: ProductCatalogCandidate | null = null;
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const score = getTokenOverlapScore(rawProductName, candidate.name);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestCandidate = candidate;
+    }
+  }
+
+  if (bestScore >= 0.45) {
+    return bestCandidate;
+  }
+
+  return null;
+}
+
 interface GeminiDetectionResult {
   item_name: string;
   category: string;
@@ -34,6 +185,28 @@ interface GeminiDetectionResult {
   quantity_estimate: number;
   unit: string;
   ingredients_to_deduct: IngredientDeduction[];
+}
+
+export interface StockInCatalogIngredient {
+  name: string;
+  unit: string;
+  category: string;
+}
+
+export interface ProductCatalogCandidate {
+  id: string;
+  name: string;
+  category: string;
+  description?: string | null;
+}
+
+export interface GeminiProductClassificationResult {
+  product_id: string;
+  product_name: string;
+  category: string;
+  confidence: ConfidenceLevel;
+  quantity_estimate: number;
+  unit: string;
 }
 
 interface GeminiRequestErrorShape {
@@ -289,7 +462,8 @@ function toGeminiRequestErrorShape(
 async function requestGeminiResponsePayload(
   file: File,
   imageBase64: string,
-  model: string
+  model: string,
+  promptText: string
 ): Promise<unknown> {
   const endpoint = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${appEnv.geminiApiKey}`;
 
@@ -307,7 +481,7 @@ async function requestGeminiResponsePayload(
       contents: [
         {
           parts: [
-            { text: INVENTORY_ANALYSIS_PROMPT },
+            { text: promptText },
             {
               inline_data: {
                 mime_type: file.type || "image/jpeg",
@@ -402,12 +576,30 @@ export function getGeminiUsageSnapshot(): GeminiUsageSnapshot {
   };
 }
 
-export async function detectIngredientsWithGemini(
-  file: File
-): Promise<GeminiDetectionResult> {
-  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+function parseGeminiPayloadAsRecord(payload: unknown): Record<string, unknown> {
+  const responseTextCandidate =
+    (payload as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }>;
+    })?.candidates?.[0]?.content?.parts?.find(
+      (part: { text?: unknown }) => typeof part.text === "string"
+    )?.text;
 
+  const responseText =
+    typeof responseTextCandidate === "string" ? responseTextCandidate : "";
+
+  if (!responseText) {
+    throw new Error("Gemini returned an empty response.");
+  }
+
+  return JSON.parse(extractJsonString(responseText)) as Record<string, unknown>;
+}
+
+async function requestGeminiPayloadWithFallback(
+  file: File,
+  promptText: string
+): Promise<unknown> {
   geminiUsageState.total_requests += 1;
+
   const imageBase64 = arrayBufferToBase64(await file.arrayBuffer());
   const candidateModels = getCandidateModels();
   let modelsToTry = candidateModels.filter(
@@ -433,11 +625,12 @@ export async function detectIngredientsWithGemini(
         const responsePayload = await requestGeminiResponsePayload(
           file,
           imageBase64,
-          model
+          model,
+          promptText
         );
 
         geminiUsageState.last_error = null;
-        return parseGeminiResponsePayload(responsePayload);
+        return responsePayload;
       } catch (error) {
         const normalizedError = toGeminiRequestErrorShape(error, model);
         lastError = normalizedError;
@@ -473,4 +666,171 @@ export async function detectIngredientsWithGemini(
   }
 
   throw new Error("Gemini request failed: all models are unavailable.");
+}
+
+function mapStockInIngredientsToCatalog(
+  rawIngredients: unknown,
+  catalog: StockInCatalogIngredient[],
+  fallbackQuantity: number
+): IngredientDeduction[] {
+  const catalogByExactKey = new Map<string, StockInCatalogIngredient>();
+  const catalogByName = new Map<string, StockInCatalogIngredient>();
+
+  for (const ingredient of catalog) {
+    const normalizedName = normalizeText(ingredient.name);
+    const normalizedUnit = normalizeText(ingredient.unit);
+
+    catalogByExactKey.set(`${normalizedName}|${normalizedUnit}`, ingredient);
+
+    if (!catalogByName.has(normalizedName)) {
+      catalogByName.set(normalizedName, ingredient);
+    }
+  }
+
+  if (!Array.isArray(rawIngredients)) {
+    return [];
+  }
+
+  const mergedByKey = new Map<string, IngredientDeduction>();
+
+  for (const rawIngredient of rawIngredients) {
+    if (!rawIngredient || typeof rawIngredient !== "object") {
+      continue;
+    }
+
+    const record = rawIngredient as Record<string, unknown>;
+    const rawName = toNonEmptyString(record.item_name ?? record.name, "");
+    const rawUnit = toNonEmptyString(record.unit, "");
+
+    if (!rawName) {
+      continue;
+    }
+
+    const exactCatalogKey = `${normalizeText(rawName)}|${normalizeText(rawUnit)}`;
+    const matchedCatalog =
+      catalogByExactKey.get(exactCatalogKey) ??
+      catalogByName.get(normalizeText(rawName)) ??
+      null;
+
+    if (!matchedCatalog) {
+      continue;
+    }
+
+    const quantity = clampQuantity(
+      toPositiveNumber(record.quantity, fallbackQuantity),
+      0.05,
+      500
+    );
+    const mergedKey = `${normalizeText(matchedCatalog.name)}|${normalizeText(matchedCatalog.unit)}`;
+    const existing = mergedByKey.get(mergedKey);
+
+    if (existing) {
+      existing.quantity = Number((existing.quantity + quantity).toFixed(3));
+      continue;
+    }
+
+    mergedByKey.set(mergedKey, {
+      item_name: matchedCatalog.name,
+      category: matchedCatalog.category,
+      unit: matchedCatalog.unit,
+      quantity: Number(quantity.toFixed(3)),
+    });
+  }
+
+  return [...mergedByKey.values()];
+}
+
+export async function detectIngredientsWithGemini(
+  file: File
+): Promise<GeminiDetectionResult> {
+  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+
+  await assertImageQualityForAi(file);
+  const responsePayload = await requestGeminiPayloadWithFallback(
+    file,
+    INVENTORY_ANALYSIS_PROMPT
+  );
+
+  return parseGeminiResponsePayload(responsePayload);
+}
+
+export async function detectStockInWithCatalogGemini(
+  file: File,
+  ingredientCatalog: StockInCatalogIngredient[]
+): Promise<GeminiDetectionResult> {
+  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+
+  if (ingredientCatalog.length === 0) {
+    throw new Error("Ingredient catalog is required for stock-in scanning.");
+  }
+
+  await assertImageQualityForAi(file);
+  const prompt = buildStockInCatalogPrompt(ingredientCatalog);
+  const responsePayload = await requestGeminiPayloadWithFallback(file, prompt);
+  const parsed = parseGeminiPayloadAsRecord(responsePayload);
+  const quantityEstimate = clampQuantity(
+    toPositiveNumber(parsed.quantity_estimate, 1),
+    0.05,
+    500
+  );
+
+  const ingredients = mapStockInIngredientsToCatalog(
+    parsed.ingredients_to_deduct,
+    ingredientCatalog,
+    quantityEstimate
+  );
+
+  if (ingredients.length === 0) {
+    throw new Error(
+      "AI could not match this image to known ingredients. Please retake image or add lines manually."
+    );
+  }
+
+  return {
+    item_name: toNonEmptyString(parsed.item_name, "Stock In"),
+    category: "Stock In",
+    confidence: toConfidenceLevel(parsed.confidence),
+    quantity_estimate: Number(quantityEstimate.toFixed(3)),
+    unit: toNonEmptyString(parsed.unit, "batch"),
+    ingredients_to_deduct: ingredients,
+  };
+}
+
+export async function classifyProductWithCatalogGemini(
+  file: File,
+  productCatalog: ProductCatalogCandidate[]
+): Promise<GeminiProductClassificationResult> {
+  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+
+  if (productCatalog.length === 0) {
+    throw new Error("Product catalog is required for stock-out scanning.");
+  }
+
+  await assertImageQualityForAi(file);
+  const prompt = buildProductCatalogPrompt(productCatalog);
+  const responsePayload = await requestGeminiPayloadWithFallback(file, prompt);
+  const parsed = parseGeminiPayloadAsRecord(responsePayload);
+  const rawProductName = toNonEmptyString(parsed.product_name, "");
+  const matchedProduct = resolveProductCandidate(rawProductName, productCatalog);
+
+  if (!matchedProduct) {
+    throw new Error(
+      "AI could not confidently match the image to a known product. Please select product manually."
+    );
+  }
+
+  const quantityEstimate = clampQuantity(
+    toPositiveNumber(parsed.quantity_estimate, 1),
+    0.05,
+    100
+  );
+
+  return {
+    product_id: matchedProduct.id,
+    product_name: matchedProduct.name,
+    category: matchedProduct.category,
+    confidence: toConfidenceLevel(parsed.confidence),
+    quantity_estimate: Number(quantityEstimate.toFixed(3)),
+    unit: "serving",
+  };
 }

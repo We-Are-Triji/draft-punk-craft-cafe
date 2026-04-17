@@ -16,7 +16,7 @@ import { useProducts } from "@/hooks/useProducts";
 import {
   confirmScanDeduction,
   recordManualStockIn,
-  scanImageForDeduction,
+  scanImageForStockInCatalog,
 } from "@/lib/inventoryService";
 import type {
   IngredientDeduction,
@@ -490,7 +490,10 @@ export function InventoryScreen() {
     setIsAiScanning(true);
 
     try {
-      const detectedResult = await scanImageForDeduction(aiImage);
+      const detectedResult = await scanImageForStockInCatalog(
+        aiImage,
+        recipeIngredientCatalog
+      );
       setAiScanResult(detectedResult);
       setAiLines(
         toAiLineDrafts(detectedResult.ingredients_to_deduct, recipeIngredientCatalog)

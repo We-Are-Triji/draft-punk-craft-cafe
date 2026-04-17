@@ -25,15 +25,13 @@ import { useInventory } from "@/hooks/useInventory";
 import { useProducts } from "@/hooks/useProducts";
 import { useTransactionOperations } from "@/hooks/useTransactionOperations";
 import {
-  confirmScanDeduction,
-  scanImageForDeduction,
+  scanImageForStockOutProductCatalog,
+  type StockOutProductScanResult,
 } from "@/lib/inventoryService";
 import { createSaleTransaction } from "@/lib/transactionService";
 import type {
-  IngredientDeduction,
   InventoryItemRow,
   OperationType,
-  ScanDetectionResult,
   TransactionOperationWithLines,
 } from "@/types/inventory";
 import type { ProductWithIngredients } from "@/types/recipes";
@@ -62,34 +60,6 @@ const SUPPORTED_IMAGE_EXTENSIONS = [
 type OperationFilter = "all" | OperationType;
 
 interface SaleRequirement {
-  ingredient_name: string;
-  ingredient_unit: string;
-  required_quantity: number;
-  available_quantity: number;
-  remaining_quantity: number;
-  inventory_item_name: string | null;
-  inventory_item_unit: string | null;
-  is_available: boolean;
-}
-
-interface RecipeIngredientCatalogItem {
-  key: string;
-  name: string;
-  unit: string;
-  category: string;
-  linked_products: string[];
-}
-
-interface StockOutScanLineDraft {
-  id: string;
-  detected_name: string;
-  detected_unit: string;
-  selected_key: string;
-  quantity: string;
-}
-
-interface StockOutRequirement {
-  key: string;
   ingredient_name: string;
   ingredient_unit: string;
   required_quantity: number;
@@ -187,24 +157,6 @@ function getOperationBadgeClass(operationType: OperationType): string {
   return "bg-gray-100 text-gray-600";
 }
 
-function normalizeValue(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function toIngredientKey(name: string, unit: string): string {
-  return `${normalizeValue(name)}|${normalizeValue(unit)}`;
-}
-
-function parsePositiveNumber(value: string, fieldLabel: string): number {
-  const parsed = Number(value);
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${fieldLabel} must be greater than zero.`);
-  }
-
-  return parsed;
-}
-
 function isSupportedImageFile(imageFile: File): boolean {
   if (SUPPORTED_IMAGE_MIME_TYPES.includes(imageFile.type)) {
     return true;
@@ -215,59 +167,6 @@ function isSupportedImageFile(imageFile: File): boolean {
   return SUPPORTED_IMAGE_EXTENSIONS.some((extension) =>
     normalizedName.endsWith(extension)
   );
-}
-
-function buildRecipeIngredientCatalog(
-  products: ProductWithIngredients[]
-): RecipeIngredientCatalogItem[] {
-  const ingredientMap = new Map<string, RecipeIngredientCatalogItem>();
-
-  for (const product of products) {
-    if (!product.is_active) {
-      continue;
-    }
-
-    for (const ingredient of product.ingredients) {
-      const trimmedName = ingredient.name.trim();
-
-      if (!trimmedName) {
-        continue;
-      }
-
-      const trimmedUnit = ingredient.unit.trim() || "pcs";
-      const key = toIngredientKey(trimmedName, trimmedUnit);
-      const existing = ingredientMap.get(key);
-
-      if (existing) {
-        if (!existing.linked_products.includes(product.name)) {
-          existing.linked_products.push(product.name);
-          existing.linked_products.sort((left, right) =>
-            left.localeCompare(right)
-          );
-        }
-
-        continue;
-      }
-
-      ingredientMap.set(key, {
-        key,
-        name: trimmedName,
-        unit: trimmedUnit,
-        category: product.category.trim() || "Recipe",
-        linked_products: [product.name],
-      });
-    }
-  }
-
-  return [...ingredientMap.values()].sort((left, right) => {
-    const byName = left.name.localeCompare(right.name);
-
-    if (byName !== 0) {
-      return byName;
-    }
-
-    return left.unit.localeCompare(right.unit);
-  });
 }
 
 function findInventoryMatch(
@@ -327,46 +226,6 @@ function buildSaleRequirements(
   });
 }
 
-function findRecipeCatalogMatch(
-  ingredient: IngredientDeduction,
-  catalog: RecipeIngredientCatalogItem[]
-): RecipeIngredientCatalogItem | null {
-  const ingredientName = normalizeValue(ingredient.item_name);
-  const ingredientUnit = normalizeValue(ingredient.unit);
-
-  const exactMatch =
-    catalog.find(
-      (entry) =>
-        normalizeValue(entry.name) === ingredientName &&
-        normalizeValue(entry.unit) === ingredientUnit
-    ) ?? null;
-
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  return (
-    catalog.find((entry) => normalizeValue(entry.name) === ingredientName) ?? null
-  );
-}
-
-function toStockOutScanLineDrafts(
-  ingredients: IngredientDeduction[],
-  catalog: RecipeIngredientCatalogItem[]
-): StockOutScanLineDraft[] {
-  return ingredients.map((ingredient, index) => {
-    const matched = findRecipeCatalogMatch(ingredient, catalog);
-
-    return {
-      id: `scan-line-${Date.now()}-${index}`,
-      detected_name: ingredient.item_name,
-      detected_unit: ingredient.unit,
-      selected_key: matched?.key ?? "",
-      quantity: formatQuantity(Math.max(0, ingredient.quantity)),
-    };
-  });
-}
-
 export function TransactionsScreen() {
   const {
     operations,
@@ -411,8 +270,10 @@ export function TransactionsScreen() {
   const [isAiDragging, setIsAiDragging] = useState(false);
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
-  const [aiScanResult, setAiScanResult] = useState<ScanDetectionResult | null>(null);
-  const [aiLines, setAiLines] = useState<StockOutScanLineDraft[]>([]);
+  const [aiScanResult, setAiScanResult] = useState<StockOutProductScanResult | null>(null);
+  const [aiSelectedProductId, setAiSelectedProductId] = useState<string | null>(null);
+  const [aiQuantityInput, setAiQuantityInput] = useState("1");
+  const [aiUnitPriceInput, setAiUnitPriceInput] = useState("");
   const [aiNotesInput, setAiNotesInput] = useState("");
 
   const [actionError, setActionError] = useState<string | null>(null);
@@ -510,16 +371,26 @@ export function TransactionsScreen() {
     insufficientRequirements.length === 0 &&
     !isSubmitting;
 
-  const recipeIngredientCatalog = useMemo(
-    () => buildRecipeIngredientCatalog(products),
+  const aiProductCatalog = useMemo(
+    () =>
+      products
+        .filter((product) => product.is_active)
+        .map((product) => ({
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          description: product.description,
+        })),
     [products]
   );
 
-  const recipeCatalogByKey = useMemo(() => {
-    return new Map(
-      recipeIngredientCatalog.map((ingredient) => [ingredient.key, ingredient] as const)
-    );
-  }, [recipeIngredientCatalog]);
+  const aiSelectedProduct = useMemo(
+    () => products.find((product) => product.id === aiSelectedProductId) ?? null,
+    [aiSelectedProductId, products]
+  );
+
+  const aiQuantityNumber = Number(aiQuantityInput);
+  const aiNormalizedQuantity = Number.isFinite(aiQuantityNumber) ? aiQuantityNumber : 0;
 
   useEffect(() => {
     return () => {
@@ -529,88 +400,37 @@ export function TransactionsScreen() {
     };
   }, [aiPreviewUrl]);
 
-  const aiAggregatedRequirements = useMemo(() => {
-    const requirementMap = new Map<string, StockOutRequirement>();
-
-    for (const line of aiLines) {
-      if (!line.selected_key) {
-        continue;
-      }
-
-      const selectedIngredient = recipeCatalogByKey.get(line.selected_key);
-
-      if (!selectedIngredient) {
-        continue;
-      }
-
-      const quantity = Number(line.quantity);
-
-      if (!Number.isFinite(quantity) || quantity <= 0) {
-        continue;
-      }
-
-      const existingRequirement = requirementMap.get(selectedIngredient.key);
-
-      if (existingRequirement) {
-        existingRequirement.required_quantity = Number(
-          (existingRequirement.required_quantity + quantity).toFixed(3)
-        );
-        existingRequirement.remaining_quantity = Number(
-          (
-            existingRequirement.available_quantity -
-            existingRequirement.required_quantity
-          ).toFixed(3)
-        );
-        existingRequirement.is_available =
-          existingRequirement.inventory_item_name !== null &&
-          existingRequirement.remaining_quantity >= 0;
-
-        continue;
-      }
-
-      const matchedInventoryItem = findInventoryMatch(
-        selectedIngredient.name,
-        selectedIngredient.unit,
-        inventoryItems
-      );
-      const availableQuantity = matchedInventoryItem?.current_stock ?? 0;
-      const remainingQuantity = availableQuantity - quantity;
-
-      requirementMap.set(selectedIngredient.key, {
-        key: selectedIngredient.key,
-        ingredient_name: selectedIngredient.name,
-        ingredient_unit: selectedIngredient.unit,
-        required_quantity: Number(quantity.toFixed(3)),
-        available_quantity: availableQuantity,
-        remaining_quantity: Number(remainingQuantity.toFixed(3)),
-        inventory_item_name: matchedInventoryItem?.name ?? null,
-        inventory_item_unit: matchedInventoryItem?.unit ?? null,
-        is_available: matchedInventoryItem !== null && remainingQuantity >= 0,
-      });
+  const aiSaleRequirements = useMemo(() => {
+    if (!aiSelectedProduct) {
+      return [];
     }
 
-    return [...requirementMap.values()].sort((left, right) =>
-      left.ingredient_name.localeCompare(right.ingredient_name)
-    );
-  }, [aiLines, inventoryItems, recipeCatalogByKey]);
+    return buildSaleRequirements(aiSelectedProduct, aiNormalizedQuantity, inventoryItems);
+  }, [aiNormalizedQuantity, aiSelectedProduct, inventoryItems]);
 
-  const insufficientAiRequirements = useMemo(
-    () => aiAggregatedRequirements.filter((requirement) => !requirement.is_available),
-    [aiAggregatedRequirements]
+  const aiInsufficientRequirements = useMemo(
+    () => aiSaleRequirements.filter((requirement) => !requirement.is_available),
+    [aiSaleRequirements]
   );
+
+  const aiHasRecipeConfigured =
+    aiSelectedProduct !== null && aiSelectedProduct.ingredients.length > 0;
 
   const canConfirmAiStockOut =
     aiScanResult !== null &&
-    aiLines.length > 0 &&
-    aiAggregatedRequirements.length > 0 &&
-    insufficientAiRequirements.length === 0 &&
+    aiSelectedProduct !== null &&
+    aiHasRecipeConfigured &&
+    aiNormalizedQuantity > 0 &&
+    aiInsufficientRequirements.length === 0 &&
     !isAiScanning &&
     !isAiSubmitting;
 
   const resetAiForm = () => {
     setAiImage(null);
     setAiScanResult(null);
-    setAiLines([]);
+    setAiSelectedProductId(null);
+    setAiQuantityInput("1");
+    setAiUnitPriceInput("");
     setAiNotesInput("");
     setIsAiDragging(false);
     setAiPreviewUrl((currentPreviewUrl) => {
@@ -677,7 +497,9 @@ export function TransactionsScreen() {
 
     setActionError(null);
     setAiScanResult(null);
-    setAiLines([]);
+    setAiSelectedProductId(null);
+    setAiQuantityInput("1");
+    setAiUnitPriceInput("");
     setAiImage(imageFile);
     setAiPreviewUrl((currentPreview) => {
       if (currentPreview) {
@@ -705,10 +527,8 @@ export function TransactionsScreen() {
       return;
     }
 
-    if (recipeIngredientCatalog.length === 0) {
-      setActionError(
-        "No recipe ingredients available. Configure recipe ingredients first."
-      );
+    if (aiProductCatalog.length === 0) {
+      setActionError("No active products available. Configure products first.");
       return;
     }
 
@@ -717,15 +537,14 @@ export function TransactionsScreen() {
     setIsAiScanning(true);
 
     try {
-      const detectedResult = await scanImageForDeduction(aiImage);
-      setAiScanResult(detectedResult);
-      setAiLines(
-        toStockOutScanLineDrafts(
-          detectedResult.ingredients_to_deduct,
-          recipeIngredientCatalog
-        )
+      const detectedResult = await scanImageForStockOutProductCatalog(
+        aiImage,
+        aiProductCatalog
       );
-      setAiNotesInput(`Stock-out AI confirmation for ${detectedResult.item_name}`);
+      setAiScanResult(detectedResult);
+      setAiSelectedProductId(detectedResult.product_id);
+      setAiQuantityInput(formatQuantity(Math.max(0.05, detectedResult.quantity_estimate)));
+      setAiNotesInput(`AI-assisted stock-out for ${detectedResult.product_name}`);
     } catch (scanError) {
       setActionError(
         scanError instanceof Error
@@ -737,122 +556,63 @@ export function TransactionsScreen() {
     }
   };
 
-  const updateAiLine = (
-    lineId: string,
-    field: "selected_key" | "quantity",
-    value: string
-  ) => {
-    setAiLines((previousLines) =>
-      previousLines.map((line) =>
-        line.id === lineId
-          ? {
-              ...line,
-              [field]: value,
-            }
-          : line
-      )
-    );
-  };
-
-  const addAiLine = () => {
-    setAiLines((previousLines) => [
-      ...previousLines,
-      {
-        id: `scan-line-${Date.now()}-${previousLines.length}`,
-        detected_name: "Manual line",
-        detected_unit: "",
-        selected_key: recipeIngredientCatalog[0]?.key ?? "",
-        quantity: "1",
-      },
-    ]);
-  };
-
-  const removeAiLine = (lineId: string) => {
-    setAiLines((previousLines) => previousLines.filter((line) => line.id !== lineId));
-  };
-
   const handleConfirmAiStockOut = async () => {
     if (!aiScanResult) {
       setActionError("No AI stock-out scan result found.");
       return;
     }
 
-    if (aiLines.length === 0) {
-      setActionError("No AI ingredient lines available. Add or scan lines first.");
+    if (!aiSelectedProduct) {
+      setActionError("Select a product before confirming AI stock out.");
       return;
     }
 
-    const ingredientMap = new Map<string, IngredientDeduction>();
+    if (!aiHasRecipeConfigured) {
+      setActionError("Selected product has no recipe ingredients configured.");
+      return;
+    }
 
-    try {
-      for (const line of aiLines) {
-        if (!line.selected_key) {
-          throw new Error(
-            "Match each scanned line to a recipe ingredient before confirming."
-          );
-        }
+    if (!(aiNormalizedQuantity > 0)) {
+      setActionError("Quantity must be greater than zero.");
+      return;
+    }
 
-        const selectedIngredient = recipeCatalogByKey.get(line.selected_key);
-
-        if (!selectedIngredient) {
-          throw new Error("One or more selected ingredients are invalid.");
-        }
-
-        const quantity = parsePositiveNumber(line.quantity, "Line quantity");
-        const existing = ingredientMap.get(selectedIngredient.key);
-
-        if (existing) {
-          existing.quantity = Number((existing.quantity + quantity).toFixed(3));
-          continue;
-        }
-
-        ingredientMap.set(selectedIngredient.key, {
-          item_name: selectedIngredient.name,
-          category: selectedIngredient.category,
-          unit: selectedIngredient.unit,
-          quantity,
-        });
-      }
-
-      if (ingredientMap.size === 0) {
-        throw new Error("At least one valid ingredient line is required.");
-      }
-
-      if (insufficientAiRequirements.length > 0) {
-        throw new Error(
-          "Cannot confirm stock out. One or more ingredient stocks are insufficient."
-        );
-      }
-    } catch (validationError) {
+    if (aiInsufficientRequirements.length > 0) {
       setActionError(
-        validationError instanceof Error
-          ? validationError.message
-          : "Please review AI stock-out lines before confirming."
+        "Cannot confirm AI stock out. One or more required ingredients are insufficient."
       );
       return;
     }
 
-    const detectionPayload: ScanDetectionResult = {
-      ...aiScanResult,
-      ingredients_to_deduct: [...ingredientMap.values()],
-    };
+    const aiUnitPriceValue = aiUnitPriceInput.trim();
+    const parsedAiUnitPrice =
+      aiUnitPriceValue.length === 0 ? null : Number(aiUnitPriceValue);
+
+    if (
+      parsedAiUnitPrice !== null &&
+      (!Number.isFinite(parsedAiUnitPrice) || parsedAiUnitPrice < 0)
+    ) {
+      setActionError("Unit price must be empty or a non-negative number.");
+      return;
+    }
 
     setActionSuccess(null);
     setActionError(null);
     setIsAiSubmitting(true);
 
     try {
-      const response = await confirmScanDeduction({
-        detection: detectionPayload,
-        imageFile: aiImage,
-        transactionType: "stock_out",
+      const createdOperationId = await createSaleTransaction({
+        product_id: aiSelectedProduct.id,
+        quantity: aiNormalizedQuantity,
+        unit_price: parsedAiUnitPrice,
         notes: aiNotesInput,
       });
 
       await Promise.all([refresh(), refreshInventory()]);
+      setSelectedId(createdOperationId);
       setPage(1);
       setActionSuccess(
-        `AI stock-out confirmed. ${response.deductionsApplied} ingredient transaction(s) logged.`
+        `AI stock-out confirmed for ${aiSelectedProduct.name} x${formatQuantity(aiNormalizedQuantity)}.`
       );
       setIsStockOutAiModalOpen(false);
       resetAiForm();
@@ -976,7 +736,7 @@ export function TransactionsScreen() {
               >
                 <p className="font-bold text-gray-800">AI Scan Stock Out</p>
                 <p className="text-xs text-gray-600 mt-1">
-                  Scan product image, edit AI findings, then confirm deduction.
+                  Scan product image, review AI product match, then confirm sale.
                 </p>
               </button>
             </div>
@@ -1257,7 +1017,7 @@ export function TransactionsScreen() {
               <div>
                 <h3 className="text-xl font-black text-gray-800">AI Scan Stock Out</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Human in the loop: scan image, edit findings, then confirm deduction.
+                  Human in the loop: classify product from catalog, review quantity, then confirm sale.
                 </p>
               </div>
               <button
@@ -1270,9 +1030,9 @@ export function TransactionsScreen() {
             </div>
 
             <div className="flex-1 overflow-auto p-5 space-y-4">
-              {recipeIngredientCatalog.length === 0 ? (
+              {aiProductCatalog.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                  No recipe ingredients are configured. Add recipe ingredients first.
+                  No active products are configured. Add products and recipes first.
                 </div>
               ) : (
                 <>
@@ -1315,7 +1075,7 @@ export function TransactionsScreen() {
                         <div className="space-y-1">
                           <p className="font-medium text-gray-700">Drop image here</p>
                           <p className="text-sm text-gray-500">
-                            Or choose a file to scan stock-out ingredients.
+                            Or choose an image to classify product and estimate quantity.
                           </p>
                         </div>
                       </>
@@ -1354,13 +1114,13 @@ export function TransactionsScreen() {
 
                   {aiScanResult ? (
                     <>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                         <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
                           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
                             Detected Product
                           </p>
                           <p className="text-sm font-semibold text-gray-800 mt-1">
-                            {aiScanResult.item_name}
+                            {aiScanResult.product_name}
                           </p>
                         </div>
                         <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
@@ -1379,120 +1139,92 @@ export function TransactionsScreen() {
                             {formatQuantity(aiScanResult.quantity_estimate)} {aiScanResult.unit}
                           </p>
                         </div>
+                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                            Source
+                          </p>
+                          <p className="text-sm font-semibold text-gray-800 mt-1 uppercase">
+                            {aiScanResult.source}
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                          <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
-                            Review And Edit Findings
-                          </p>
-                          <button
-                            type="button"
-                            onClick={addAiLine}
-                            className="text-xs font-bold text-[#3E2723]"
-                            disabled={isAiSubmitting}
-                          >
-                            + Add Line
-                          </button>
+                      <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/40 space-y-3">
+                        <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                          Review Product And Quantity
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="md:col-span-2">
+                            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                              Product
+                            </label>
+                            <select
+                              value={aiSelectedProductId ?? ""}
+                              onChange={(event) =>
+                                setAiSelectedProductId(event.target.value || null)
+                              }
+                              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                            >
+                              <option value="" disabled>
+                                Select product
+                              </option>
+                              {aiProductCatalog.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                  {product.name} ({product.category})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                              Quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={aiQuantityInput}
+                              onChange={(event) => setAiQuantityInput(event.target.value)}
+                              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                            />
+                          </div>
                         </div>
 
-                        {aiLines.length === 0 ? (
-                          <div className="p-4 text-sm text-amber-700 bg-amber-50 border-t border-amber-100">
-                            AI returned no lines. Add at least one line manually before confirming.
-                          </div>
-                        ) : (
-                          <div className="overflow-auto">
-                            <table className="w-full text-left">
-                              <thead className="text-[10px] uppercase tracking-widest text-gray-400 border-b border-gray-100">
-                                <tr>
-                                  <th className="px-3 py-2">Detected</th>
-                                  <th className="px-3 py-2">Match To Recipe Ingredient</th>
-                                  <th className="px-3 py-2">Quantity</th>
-                                  <th className="px-3 py-2">Unit</th>
-                                  <th className="px-3 py-2 text-right">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {aiLines.map((line) => {
-                                  const selectedIngredient =
-                                    recipeCatalogByKey.get(line.selected_key) ?? null;
-
-                                  return (
-                                    <tr key={line.id}>
-                                      <td className="px-3 py-3 text-sm text-gray-700 font-semibold">
-                                        {line.detected_name}
-                                      </td>
-                                      <td className="px-3 py-3">
-                                        <select
-                                          value={line.selected_key}
-                                          onChange={(event) =>
-                                            updateAiLine(
-                                              line.id,
-                                              "selected_key",
-                                              event.target.value
-                                            )
-                                          }
-                                          className="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs outline-none"
-                                        >
-                                          <option value="">Select ingredient</option>
-                                          {recipeIngredientCatalog.map((ingredient) => (
-                                            <option key={ingredient.key} value={ingredient.key}>
-                                              {ingredient.name} ({ingredient.unit})
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </td>
-                                      <td className="px-3 py-3">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          value={line.quantity}
-                                          onChange={(event) =>
-                                            updateAiLine(
-                                              line.id,
-                                              "quantity",
-                                              event.target.value
-                                            )
-                                          }
-                                          className="w-28 px-2 py-2 border border-gray-200 rounded-lg text-xs outline-none"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-3 text-xs text-gray-600 font-semibold uppercase">
-                                        {selectedIngredient?.unit || line.detected_unit || "-"}
-                                      </td>
-                                      <td className="px-3 py-3 text-right">
-                                        <button
-                                          type="button"
-                                          onClick={() => removeAiLine(line.id)}
-                                          className="text-xs font-bold text-red-500 disabled:opacity-40"
-                                          disabled={aiLines.length <= 1 || isAiSubmitting}
-                                        >
-                                          Remove
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
+                        <div>
+                          <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                            Unit Price (optional)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={aiUnitPriceInput}
+                            onChange={(event) => setAiUnitPriceInput(event.target.value)}
+                            placeholder="Example: 120"
+                            className="w-full md:w-60 px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                          />
+                        </div>
                       </div>
 
                       <div className="rounded-xl border border-gray-100 overflow-hidden">
                         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
                           <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
-                            Ingredient Availability Checker
+                            Recipe Availability Checker
                           </p>
                           <span className="text-[11px] text-gray-400">
-                            {aiAggregatedRequirements.length} ingredient(s)
+                            {aiSaleRequirements.length} ingredient(s)
                           </span>
                         </div>
 
-                        {aiAggregatedRequirements.length === 0 ? (
+                        {!aiSelectedProduct ? (
                           <div className="p-4 text-sm text-gray-500">
-                            Select ingredients and enter quantity to validate stock.
+                            Select a product to validate recipe ingredient availability.
+                          </div>
+                        ) : !aiHasRecipeConfigured ? (
+                          <div className="p-4 text-sm text-red-600">
+                            Selected product has no recipe ingredients configured.
                           </div>
                         ) : (
                           <table className="w-full text-left">
@@ -1506,8 +1238,10 @@ export function TransactionsScreen() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                              {aiAggregatedRequirements.map((requirement) => (
-                                <tr key={requirement.key}>
+                              {aiSaleRequirements.map((requirement) => (
+                                <tr
+                                  key={`${requirement.ingredient_name}-${requirement.ingredient_unit}`}
+                                >
                                   <td className="px-3 py-3 text-sm font-semibold text-gray-800">
                                     {requirement.ingredient_name}
                                     <span className="ml-2 text-xs text-gray-400 uppercase">
@@ -1541,9 +1275,9 @@ export function TransactionsScreen() {
                         )}
                       </div>
 
-                      {insufficientAiRequirements.length > 0 && (
+                      {aiInsufficientRequirements.length > 0 && (
                         <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
-                          {insufficientAiRequirements.length} ingredient requirement(s) are insufficient.
+                          {aiInsufficientRequirements.length} recipe ingredient requirement(s) are insufficient.
                         </div>
                       )}
 

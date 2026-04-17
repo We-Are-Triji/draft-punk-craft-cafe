@@ -1,15 +1,23 @@
 import { appEnv } from "@/lib/env";
 import {
+  classifyProductWithCatalogGemini,
   detectIngredientsWithGemini,
+  detectStockInWithCatalogGemini,
   getGeminiUsageSnapshot,
+  type ProductCatalogCandidate,
+  type StockInCatalogIngredient,
 } from "@/lib/geminiClient";
 import {
+  computeImageSemanticSignature,
+  findSemanticCachedPayload,
   getCachedImageResult,
   hashImageFile,
   upsertCachedImageResult,
+  upsertSemanticCachedPayload,
 } from "@/lib/imageCache";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import type {
+  ConfidenceLevel,
   ConfirmDeductionResult,
   IngredientDeduction,
   InventoryItemRow,
@@ -69,6 +77,44 @@ const recipeTemplates: Record<string, IngredientDeduction[]> = {
 };
 
 const scansInFlightByHash = new Map<string, Promise<ScanDetectionResult>>();
+const stockInScansInFlightByKey = new Map<string, Promise<ScanDetectionResult>>();
+const stockOutScansInFlightByKey = new Map<
+  string,
+  Promise<StockOutProductScanResult>
+>();
+
+export type StockInCatalogEntry = StockInCatalogIngredient;
+
+export type StockOutProductCatalogEntry = ProductCatalogCandidate;
+
+export interface StockOutProductScanResult {
+  image_hash: string;
+  source: "cache" | "gemini";
+  product_id: string;
+  product_name: string;
+  category: string;
+  confidence: ConfidenceLevel;
+  quantity_estimate: number;
+  unit: string;
+}
+
+interface CachedStockInSemanticPayload {
+  item_name: string;
+  category: string;
+  confidence: ConfidenceLevel;
+  quantity_estimate: number;
+  unit: string;
+  ingredients_to_deduct: IngredientDeduction[];
+}
+
+interface CachedStockOutSemanticPayload {
+  product_id: string;
+  product_name: string;
+  category: string;
+  confidence: ConfidenceLevel;
+  quantity_estimate: number;
+  unit: string;
+}
 
 interface ConfirmScanDeductionInput {
   detection: ScanDetectionResult;
@@ -125,6 +171,219 @@ function getErrorMessage(error: unknown): string {
   }
 
   return String((error as { message?: unknown }).message ?? "");
+}
+
+function normalizeKeyPart(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function buildCatalogFingerprint(parts: string[]): string {
+  const normalized = parts
+    .map((part) => normalizeKeyPart(part))
+    .filter((part) => part.length > 0)
+    .sort()
+    .join("||");
+
+  let hash = 2166136261;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return `${normalized.length}:${(hash >>> 0).toString(16)}`;
+}
+
+function getStockInSemanticScope(catalog: StockInCatalogEntry[]): string {
+  const parts = catalog.map(
+    (entry) => `${entry.name}|${entry.unit}|${entry.category}`
+  );
+
+  return `stock-in:${buildCatalogFingerprint(parts)}`;
+}
+
+function getStockOutSemanticScope(catalog: StockOutProductCatalogEntry[]): string {
+  const parts = catalog.map(
+    (entry) => `${entry.id}|${entry.name}|${entry.category}|${entry.description ?? ""}`
+  );
+
+  return `stock-out:${buildCatalogFingerprint(parts)}`;
+}
+
+function normalizePositiveQuantity(value: unknown, fallbackValue: number): number {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallbackValue;
+  }
+
+  return Number(parsed.toFixed(3));
+}
+
+function isIngredientDeductionRecord(value: unknown): value is IngredientDeduction {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.item_name === "string" &&
+    typeof record.category === "string" &&
+    typeof record.unit === "string" &&
+    Number(record.quantity) > 0
+  );
+}
+
+function normalizeIngredientDeductions(
+  value: unknown
+): IngredientDeduction[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized: IngredientDeduction[] = [];
+
+  for (const item of value) {
+    if (!isIngredientDeductionRecord(item)) {
+      continue;
+    }
+
+    normalized.push({
+      item_name: item.item_name.trim(),
+      category: item.category.trim() || "Recipe",
+      unit: item.unit.trim() || "pcs",
+      quantity: normalizePositiveQuantity(item.quantity, 0),
+    });
+  }
+
+  return normalized.filter((item) => item.item_name && item.quantity > 0);
+}
+
+function normalizeStockInSemanticPayload(
+  payload: unknown
+): CachedStockInSemanticPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const itemName = String(record.item_name ?? "").trim();
+  const unit = String(record.unit ?? "").trim() || "batch";
+  const category = String(record.category ?? "").trim() || "Stock In";
+  const ingredients = normalizeIngredientDeductions(record.ingredients_to_deduct);
+
+  if (!itemName || ingredients.length === 0) {
+    return null;
+  }
+
+  const confidenceRaw = String(record.confidence ?? "").toLowerCase();
+  const confidence: ConfidenceLevel =
+    confidenceRaw === "high" || confidenceRaw === "medium" || confidenceRaw === "low"
+      ? confidenceRaw
+      : "medium";
+
+  return {
+    item_name: itemName,
+    category,
+    confidence,
+    quantity_estimate: normalizePositiveQuantity(record.quantity_estimate, 1),
+    unit,
+    ingredients_to_deduct: ingredients,
+  };
+}
+
+function normalizeStockOutSemanticPayload(
+  payload: unknown
+): CachedStockOutSemanticPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const productId = String(record.product_id ?? "").trim();
+  const productName = String(record.product_name ?? "").trim();
+
+  if (!productId || !productName) {
+    return null;
+  }
+
+  const confidenceRaw = String(record.confidence ?? "").toLowerCase();
+  const confidence: ConfidenceLevel =
+    confidenceRaw === "high" || confidenceRaw === "medium" || confidenceRaw === "low"
+      ? confidenceRaw
+      : "medium";
+
+  return {
+    product_id: productId,
+    product_name: productName,
+    category: String(record.category ?? "").trim() || "Uncategorized",
+    confidence,
+    quantity_estimate: normalizePositiveQuantity(record.quantity_estimate, 1),
+    unit: String(record.unit ?? "").trim() || "serving",
+  };
+}
+
+function normalizeStockInCatalog(
+  catalog: StockInCatalogEntry[]
+): StockInCatalogEntry[] {
+  const deduped = new Map<string, StockInCatalogEntry>();
+
+  for (const entry of catalog) {
+    const name = entry.name.trim();
+
+    if (!name) {
+      continue;
+    }
+
+    const unit = entry.unit.trim() || "pcs";
+    const category = entry.category.trim() || "Recipe";
+    const key = `${normalizeKeyPart(name)}|${normalizeKeyPart(unit)}`;
+
+    if (!deduped.has(key)) {
+      deduped.set(key, {
+        name,
+        unit,
+        category,
+      });
+    }
+  }
+
+  return [...deduped.values()].sort((left, right) => {
+    const byName = left.name.localeCompare(right.name);
+
+    if (byName !== 0) {
+      return byName;
+    }
+
+    return left.unit.localeCompare(right.unit);
+  });
+}
+
+function normalizeStockOutCatalog(
+  catalog: StockOutProductCatalogEntry[]
+): StockOutProductCatalogEntry[] {
+  const deduped = new Map<string, StockOutProductCatalogEntry>();
+
+  for (const entry of catalog) {
+    const id = entry.id.trim();
+    const name = entry.name.trim();
+
+    if (!id || !name) {
+      continue;
+    }
+
+    if (!deduped.has(id)) {
+      deduped.set(id, {
+        id,
+        name,
+        category: entry.category.trim() || "Uncategorized",
+        description: entry.description?.trim() || null,
+      });
+    }
+  }
+
+  return [...deduped.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function isMissingRelationError(error: unknown, relationName: string): boolean {
@@ -672,12 +931,223 @@ export async function scanImageForDeduction(file: File): Promise<ScanDetectionRe
   }
 }
 
+export async function scanImageForStockInCatalog(
+  file: File,
+  catalog: StockInCatalogEntry[]
+): Promise<ScanDetectionResult> {
+  const normalizedCatalog = normalizeStockInCatalog(catalog);
+
+  if (normalizedCatalog.length === 0) {
+    throw new Error("Ingredient catalog is empty. Configure recipe ingredients first.");
+  }
+
+  const imageHash = await hashImageFile(file);
+  const scope = getStockInSemanticScope(normalizedCatalog);
+  const taskKey = `${scope}:${imageHash}`;
+  const inFlightScan = stockInScansInFlightByKey.get(taskKey);
+
+  if (inFlightScan) {
+    return inFlightScan;
+  }
+
+  const scanTask = (async () => {
+    let signature: string | null = null;
+
+    try {
+      signature = await computeImageSemanticSignature(file);
+
+      const semanticCached = findSemanticCachedPayload<CachedStockInSemanticPayload>(
+        scope,
+        signature,
+        {
+          maxHammingDistance: 6,
+        }
+      );
+      const normalizedSemanticPayload = normalizeStockInSemanticPayload(semanticCached);
+
+      if (normalizedSemanticPayload) {
+        return {
+          image_hash: imageHash,
+          source: "cache" as const,
+          ...normalizedSemanticPayload,
+        };
+      }
+    } catch {
+      signature = null;
+    }
+
+    const detectedResult = await detectStockInWithCatalogGemini(file, normalizedCatalog);
+    const scanResult: ScanDetectionResult = {
+      image_hash: imageHash,
+      item_name: detectedResult.item_name,
+      category: detectedResult.category,
+      confidence: detectedResult.confidence,
+      quantity_estimate: detectedResult.quantity_estimate,
+      unit: detectedResult.unit,
+      source: "gemini",
+      ingredients_to_deduct: detectedResult.ingredients_to_deduct,
+    };
+
+    if (signature) {
+      upsertSemanticCachedPayload(scope, signature, {
+        item_name: scanResult.item_name,
+        category: scanResult.category,
+        confidence: scanResult.confidence,
+        quantity_estimate: scanResult.quantity_estimate,
+        unit: scanResult.unit,
+        ingredients_to_deduct: scanResult.ingredients_to_deduct,
+      });
+    }
+
+    try {
+      await upsertCachedImageResult({
+        image_hash: imageHash,
+        item_name: scanResult.item_name,
+        category: scanResult.category,
+        confidence: scanResult.confidence,
+        quantity_estimate: scanResult.quantity_estimate,
+        unit: scanResult.unit,
+      });
+    } catch (error) {
+      console.warn(
+        error instanceof Error
+          ? error.message
+          : "Image cache write failed for unknown reason."
+      );
+    }
+
+    return scanResult;
+  })();
+
+  stockInScansInFlightByKey.set(taskKey, scanTask);
+
+  try {
+    return await scanTask;
+  } finally {
+    const activeTask = stockInScansInFlightByKey.get(taskKey);
+
+    if (activeTask === scanTask) {
+      stockInScansInFlightByKey.delete(taskKey);
+    }
+  }
+}
+
+export async function scanImageForStockOutProductCatalog(
+  file: File,
+  catalog: StockOutProductCatalogEntry[]
+): Promise<StockOutProductScanResult> {
+  const normalizedCatalog = normalizeStockOutCatalog(catalog);
+
+  if (normalizedCatalog.length === 0) {
+    throw new Error("Product catalog is empty. Configure products first.");
+  }
+
+  const imageHash = await hashImageFile(file);
+  const scope = getStockOutSemanticScope(normalizedCatalog);
+  const taskKey = `${scope}:${imageHash}`;
+  const inFlightScan = stockOutScansInFlightByKey.get(taskKey);
+
+  if (inFlightScan) {
+    return inFlightScan;
+  }
+
+  const scanTask = (async () => {
+    let signature: string | null = null;
+
+    try {
+      signature = await computeImageSemanticSignature(file);
+
+      const semanticCached = findSemanticCachedPayload<CachedStockOutSemanticPayload>(
+        scope,
+        signature,
+        {
+          maxHammingDistance: 6,
+        }
+      );
+      const normalizedSemanticPayload = normalizeStockOutSemanticPayload(
+        semanticCached
+      );
+
+      if (normalizedSemanticPayload) {
+        return {
+          image_hash: imageHash,
+          source: "cache" as const,
+          ...normalizedSemanticPayload,
+        };
+      }
+    } catch {
+      signature = null;
+    }
+
+    const classified = await classifyProductWithCatalogGemini(
+      file,
+      normalizedCatalog
+    );
+    const scanResult: StockOutProductScanResult = {
+      image_hash: imageHash,
+      source: "gemini",
+      product_id: classified.product_id,
+      product_name: classified.product_name,
+      category: classified.category,
+      confidence: classified.confidence,
+      quantity_estimate: classified.quantity_estimate,
+      unit: classified.unit,
+    };
+
+    if (signature) {
+      upsertSemanticCachedPayload(scope, signature, {
+        product_id: scanResult.product_id,
+        product_name: scanResult.product_name,
+        category: scanResult.category,
+        confidence: scanResult.confidence,
+        quantity_estimate: scanResult.quantity_estimate,
+        unit: scanResult.unit,
+      });
+    }
+
+    try {
+      await upsertCachedImageResult({
+        image_hash: imageHash,
+        item_name: scanResult.product_name,
+        category: scanResult.category,
+        confidence: scanResult.confidence,
+        quantity_estimate: scanResult.quantity_estimate,
+        unit: scanResult.unit,
+      });
+    } catch (error) {
+      console.warn(
+        error instanceof Error
+          ? error.message
+          : "Image cache write failed for unknown reason."
+      );
+    }
+
+    return scanResult;
+  })();
+
+  stockOutScansInFlightByKey.set(taskKey, scanTask);
+
+  try {
+    return await scanTask;
+  } finally {
+    const activeTask = stockOutScansInFlightByKey.get(taskKey);
+
+    if (activeTask === scanTask) {
+      stockOutScansInFlightByKey.delete(taskKey);
+    }
+  }
+}
+
 export function getStockScanDiagnostics(): {
   in_flight_scan_count: number;
+  stock_in_in_flight_scan_count: number;
+  stock_out_in_flight_scan_count: number;
   gemini: ReturnType<typeof getGeminiUsageSnapshot>;
 } {
   return {
     in_flight_scan_count: scansInFlightByHash.size,
+    stock_in_in_flight_scan_count: stockInScansInFlightByKey.size,
+    stock_out_in_flight_scan_count: stockOutScansInFlightByKey.size,
     gemini: getGeminiUsageSnapshot(),
   };
 }
