@@ -175,19 +175,19 @@ function getOperationLabel(operationType: OperationType): string {
 
 function getOperationBadgeClass(operationType: OperationType): string {
   if (operationType === "sale") {
-    return "bg-emerald-100 text-emerald-700";
+    return "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400";
   }
 
   if (operationType === "scan") {
-    return "bg-blue-100 text-blue-700";
+    return "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400";
   }
 
   if (operationType === "manual_stock_in") {
-    return "bg-cyan-100 text-cyan-700";
+    return "bg-cyan-100 dark:bg-cyan-950/30 text-cyan-700 dark:text-cyan-400";
   }
 
   if (operationType === "manual_stock_out") {
-    return "bg-orange-100 text-orange-700";
+    return "bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400";
   }
 
   return "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground";
@@ -961,7 +961,7 @@ export function TransactionsScreen() {
                   ) : filteredProducts.length === 0 ? (
                     <div className="p-6 text-sm text-gray-500 dark:text-muted-foreground">No products matched your search.</div>
                   ) : (
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-gray-100 dark:divide-border">
                       {filteredProducts.map((product) => (
                         <button
                           type="button"
@@ -1000,7 +1000,7 @@ export function TransactionsScreen() {
                   </div>
                 ) : (
                   <>
-                    <div className="rounded-xl border border-gray-100 dark:border-border p-4 bg-gray-50 dark:bg-muted/50/40">
+                    <div className="rounded-xl border border-gray-100 dark:border-border p-4 bg-gray-50 dark:bg-muted/30">
                       <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                         Product
                       </p>
@@ -1117,12 +1117,12 @@ export function TransactionsScreen() {
                     </div>
 
                     {insufficientRequirements.length > 0 && (
-                      <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-3 py-2 text-sm text-red-700 dark:text-red-400">
                         {insufficientRequirements.length} ingredient requirement(s) are insufficient. Update stock before confirming.
                       </div>
                     )}
 
-                    <div className="rounded-xl border border-gray-100 dark:border-border px-4 py-3 bg-gray-50 dark:bg-muted/50/40 flex items-center justify-between">
+                    <div className="rounded-xl border border-gray-100 dark:border-border px-4 py-3 bg-gray-50 dark:bg-muted/30 flex items-center justify-between">
                       <span className="text-sm font-semibold text-gray-700 dark:text-foreground">Estimated total</span>
                       <span className="text-lg font-black text-gray-800 dark:text-foreground">
                         {unitPriceInput.trim()
@@ -1189,7 +1189,7 @@ export function TransactionsScreen() {
               )}
 
               {aiProductCatalog.length === 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                   No active products are configured. Add products and recipes first.
                 </div>
               ) : (
@@ -1353,7 +1353,7 @@ export function TransactionsScreen() {
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-gray-100 dark:border-border p-4 bg-gray-50 dark:bg-muted/50/40 space-y-3">
+                      <div className="rounded-xl border border-gray-100 dark:border-border p-4 bg-gray-50 dark:bg-muted/30 space-y-3">
                         <p className="text-xs font-bold text-gray-700 dark:text-foreground uppercase tracking-widest">
                           Review Product And Quantity
                         </p>
@@ -1480,7 +1480,7 @@ export function TransactionsScreen() {
                       </div>
 
                       {aiInsufficientRequirements.length > 0 && (
-                        <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-3 py-2 text-sm text-red-700 dark:text-red-400">
                           {aiInsufficientRequirements.length} recipe ingredient requirement(s) are insufficient.
                         </div>
                       )}
@@ -1532,13 +1532,13 @@ export function TransactionsScreen() {
       )}
 
       {combinedError && (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">
           {combinedError}
         </div>
       )}
 
       {actionSuccess && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
           {actionSuccess}
         </div>
       )}
@@ -1764,7 +1764,7 @@ interface TransactionDetailPanelProps {
 function TransactionDetailPanel({ operation }: TransactionDetailPanelProps) {
   return (
     <>
-      <div className="p-5 sm:p-8 border-b border-gray-50 dark:border-border/50 bg-gray-50 dark:bg-muted/50/20">
+      <div className="p-5 sm:p-8 border-b border-gray-50 dark:border-border/50 bg-gray-50 dark:bg-muted/30">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 rounded-xl bg-[#3E2723] text-white">
             <ShoppingCart size={20} />
@@ -1840,7 +1840,7 @@ function TransactionDetailPanel({ operation }: TransactionDetailPanelProps) {
                     <td className="py-4 px-2 text-right">
                       <span
                         className={`font-mono font-black text-lg ${
-                          isStockIn ? "text-emerald-600" : "text-[#3E2723]"
+                          isStockIn ? "text-emerald-600 dark:text-emerald-400" : "text-amber-800 dark:text-amber-400"
                         }`}
                       >
                         {isStockIn ? "+" : "-"}
