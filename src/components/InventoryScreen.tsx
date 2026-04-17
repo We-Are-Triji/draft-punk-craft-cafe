@@ -117,7 +117,7 @@ function getStatus(item: { current_stock: number; reorder_threshold: number }): 
     return {
       level: "critical",
       label: "CRITICAL",
-      color: "bg-orange-100 text-orange-600",
+      color: "bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400",
     };
   }
 
@@ -125,14 +125,14 @@ function getStatus(item: { current_stock: number; reorder_threshold: number }): 
     return {
       level: "low",
       label: "LOW STOCK",
-      color: "bg-[#FFF5F0] text-orange-400",
+      color: "bg-[#FFF5F0] dark:bg-amber-950/30 text-orange-400",
     };
   }
 
   return {
     level: "healthy",
     label: "HEALTHY",
-    color: "bg-emerald-100 text-emerald-600",
+    color: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
   };
 }
 
@@ -702,18 +702,18 @@ export function InventoryScreen() {
     <div className="w-full max-w-6xl mx-auto space-y-6 p-2">
       {stockInMode === "selector" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4">
+          <div className="bg-white dark:bg-card rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-800">Choose Stock-In Method</h3>
-                <p className="text-sm text-gray-500 mt-1">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-foreground">Choose Stock-In Method</h3>
+                <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">
                   Ingredients are recipe-driven. Pick AI scan or manual ingredient addition.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeStockInModal}
-                className="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:hover:text-foreground"
               >
                 <XCircle size={18} />
               </button>
@@ -723,10 +723,10 @@ export function InventoryScreen() {
               <button
                 type="button"
                 onClick={openAiStockIn}
-                className="w-full text-left p-4 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors"
+                className="w-full text-left p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
               >
-                <p className="font-bold text-gray-800">AI Scan Stock In</p>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="font-bold text-gray-800 dark:text-foreground">AI Scan Stock In</p>
+                <p className="text-xs text-gray-600 dark:text-muted-foreground mt-1">
                   Scan image, review findings, edit values, then confirm.
                 </p>
               </button>
@@ -734,10 +734,10 @@ export function InventoryScreen() {
               <button
                 type="button"
                 onClick={() => openManualStockIn()}
-                className="w-full text-left p-4 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/50 hover:bg-gray-100 dark:hover:bg-muted transition-colors"
               >
-                <p className="font-bold text-gray-800">Manual Ingredient Addition</p>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="font-bold text-gray-800 dark:text-foreground">Manual Ingredient Addition</p>
+                <p className="text-xs text-gray-600 dark:text-muted-foreground mt-1">
                   Select a recipe ingredient and add stock manually.
                 </p>
               </button>
@@ -748,18 +748,18 @@ export function InventoryScreen() {
 
       {stockInMode === "manual" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
+          <div className="bg-white dark:bg-card rounded-2xl p-6 w-full max-w-lg shadow-xl">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-800">Manual Stock In</h3>
-                <p className="text-sm text-gray-500 mt-1">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-foreground">Manual Stock In</h3>
+                <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">
                   Add stock to an ingredient sourced from Recipes.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeStockInModal}
-                className="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground"
                 disabled={isManualSubmitting}
               >
                 <XCircle size={18} />
@@ -768,13 +768,13 @@ export function InventoryScreen() {
 
             <form onSubmit={submitManualStockIn} className="space-y-4">
               <div>
-                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                   Ingredient
                 </label>
                 <select
                   value={manualIngredientKey}
                   onChange={(event) => setManualIngredientKey(event.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                  className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                   required
                 >
                   <option value="" disabled>
@@ -789,13 +789,13 @@ export function InventoryScreen() {
               </div>
 
               {selectedManualIngredient ? (
-                <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2 text-sm text-gray-600 dark:text-muted-foreground">
                   Unit: <span className="font-semibold">{selectedManualIngredient.unit}</span>
                 </div>
               ) : null}
 
               <div>
-                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                   Quantity To Add
                 </label>
                 <input
@@ -804,20 +804,20 @@ export function InventoryScreen() {
                   step="0.01"
                   value={manualQuantity}
                   onChange={(event) => setManualQuantity(event.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                  className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                   Notes (optional)
                 </label>
                 <textarea
                   value={manualNotes}
                   onChange={(event) => setManualNotes(event.target.value)}
                   rows={2}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none resize-none"
+                  className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none resize-none"
                   placeholder="Supplier, batch, or delivery note"
                 />
               </div>
@@ -826,7 +826,7 @@ export function InventoryScreen() {
                 <button
                   type="button"
                   onClick={closeStockInModal}
-                  className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl font-bold"
+                  className="flex-1 bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground py-2.5 rounded-xl font-bold"
                   disabled={isManualSubmitting}
                 >
                   Cancel
@@ -846,18 +846,18 @@ export function InventoryScreen() {
 
       {stockInMode === "ai" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-5xl shadow-xl max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-white dark:bg-card rounded-2xl w-full max-w-5xl shadow-xl max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 dark:border-border flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-black text-gray-800">AI Stock In</h3>
-                <p className="text-sm text-gray-500 mt-1">
+                <h3 className="text-xl font-black text-gray-800 dark:text-foreground">AI Stock In</h3>
+                <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">
                   Human in the loop: scan, review, edit, and confirm.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeStockInModal}
-                className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                className="p-2 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground"
                 disabled={isAiScanning || isAiConfirming}
               >
                 <XCircle size={18} />
@@ -866,7 +866,7 @@ export function InventoryScreen() {
 
             <div className="p-5 overflow-auto space-y-4">
               {recipeIngredientCatalog.length === 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                   No recipe ingredients are configured yet. Add ingredients on Recipes first.
                 </div>
               ) : (
@@ -879,7 +879,7 @@ export function InventoryScreen() {
                     }}
                     onDragLeave={() => setIsAiDragging(false)}
                     className={`flex min-h-48 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-                      isAiDragging ? "border-amber-600 bg-amber-50" : "border-gray-200"
+                      isAiDragging ? "border-amber-600 bg-amber-50 dark:bg-amber-950/20" : "border-gray-200 dark:border-border"
                     }`}
                   >
                     <input
@@ -902,14 +902,14 @@ export function InventoryScreen() {
                       <img
                         src={aiPreviewUrl}
                         alt="AI stock-in preview"
-                        className="max-h-56 w-full max-w-md rounded-lg border border-gray-200 object-contain"
+                        className="max-h-56 w-full max-w-md rounded-lg border border-gray-200 dark:border-border object-contain"
                       />
                     ) : (
                       <>
-                        <UploadCloud className="h-10 w-10 text-gray-400" />
+                        <UploadCloud className="h-10 w-10 text-gray-400 dark:text-muted-foreground" />
                         <div className="space-y-1">
-                          <p className="font-medium text-gray-700">Drop image here</p>
-                          <p className="text-sm text-gray-500">
+                          <p className="font-medium text-gray-700 dark:text-foreground">Drop image here</p>
+                          <p className="text-sm text-gray-500 dark:text-muted-foreground">
                             Or choose an image to scan ingredients and quantities.
                           </p>
                         </div>
@@ -921,7 +921,7 @@ export function InventoryScreen() {
                     <button
                       type="button"
                       onClick={() => aiFileInputRef.current?.click()}
-                      className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white"
+                      className="px-3 py-2 rounded-xl border border-gray-200 dark:border-border text-sm font-semibold text-gray-600 dark:text-muted-foreground bg-white dark:bg-card"
                       disabled={isAiScanning || isAiConfirming}
                     >
                       Choose Image
@@ -943,42 +943,42 @@ export function InventoryScreen() {
                       )}
                     </button>
                     {aiImage ? (
-                      <span className="text-xs text-gray-500">{aiImage.name}</span>
+                      <span className="text-xs text-gray-500 dark:text-muted-foreground">{aiImage.name}</span>
                     ) : null}
                   </div>
 
                   {aiScanResult ? (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Detected Item
                           </p>
-                          <p className="text-sm font-semibold text-gray-800 mt-1">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
                             {aiScanResult.item_name}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Confidence
                           </p>
-                          <p className="text-sm font-semibold text-gray-800 mt-1 capitalize">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1 capitalize">
                             {aiScanResult.confidence}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Quantity Estimate
                           </p>
-                          <p className="text-sm font-semibold text-gray-800 mt-1">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
                             {formatNumber(aiScanResult.quantity_estimate)} {aiScanResult.unit}
                           </p>
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                          <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                      <div className="rounded-xl border border-gray-100 dark:border-border overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 flex items-center justify-between">
+                          <p className="text-xs font-bold text-gray-700 dark:text-foreground uppercase tracking-widest">
                             Review And Edit Findings
                           </p>
                           <button
@@ -992,7 +992,7 @@ export function InventoryScreen() {
 
                         <div className="overflow-auto">
                           <table className="w-full text-left">
-                            <thead className="text-[10px] uppercase tracking-widest text-gray-400 border-b border-gray-100">
+                            <thead className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-muted-foreground border-b border-gray-100 dark:border-border">
                               <tr>
                                 <th className="px-3 py-2">Detected</th>
                                 <th className="px-3 py-2">Match To Recipe Ingredient</th>
@@ -1001,14 +1001,14 @@ export function InventoryScreen() {
                                 <th className="px-3 py-2 text-right">Action</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-gray-50 dark:divide-border/50">
                               {aiLines.map((line) => {
                                 const selectedIngredient =
                                   catalogByKey.get(line.selected_key) ?? null;
 
                                 return (
                                   <tr key={line.id}>
-                                    <td className="px-3 py-3 text-sm text-gray-700 font-semibold">
+                                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-foreground font-semibold">
                                       {line.detected_name}
                                     </td>
                                     <td className="px-3 py-3">
@@ -1021,7 +1021,7 @@ export function InventoryScreen() {
                                             event.target.value
                                           )
                                         }
-                                        className="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                                        className="w-full px-2 py-2 border border-gray-200 dark:border-border rounded-lg text-xs outline-none"
                                       >
                                         <option value="">Select ingredient</option>
                                         {recipeIngredientCatalog.map((ingredient) => (
@@ -1044,10 +1044,10 @@ export function InventoryScreen() {
                                             event.target.value
                                           )
                                         }
-                                        className="w-28 px-2 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                                        className="w-28 px-2 py-2 border border-gray-200 dark:border-border rounded-lg text-xs outline-none"
                                       />
                                     </td>
-                                    <td className="px-3 py-3 text-xs text-gray-600 font-semibold uppercase">
+                                    <td className="px-3 py-3 text-xs text-gray-600 dark:text-muted-foreground font-semibold uppercase">
                                       {selectedIngredient?.unit || line.detected_unit || "-"}
                                     </td>
                                     <td className="px-3 py-3 text-right">
@@ -1072,7 +1072,7 @@ export function InventoryScreen() {
                         <button
                           type="button"
                           onClick={closeStockInModal}
-                          className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold"
+                          className="px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground font-semibold"
                           disabled={isAiConfirming}
                         >
                           Cancel
@@ -1102,54 +1102,54 @@ export function InventoryScreen() {
       )}
 
       {combinedError && (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">
           {combinedError}
         </div>
       )}
 
       {actionSuccess && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
           {actionSuccess}
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+        <div className="bg-white dark:bg-card p-6 rounded-2xl border border-gray-100 dark:border-border shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle className="text-red-500" size={18} />
-            <h3 className="font-bold text-gray-800">Low Stock Alerts</h3>
+            <h3 className="font-bold text-gray-800 dark:text-foreground">Low Stock Alerts</h3>
           </div>
 
           <div className="space-y-2">
             {loading && (
-              <p className="text-sm text-gray-500">Loading inventory alerts...</p>
+              <p className="text-sm text-gray-500 dark:text-muted-foreground">Loading inventory alerts...</p>
             )}
 
             {!loading && recipeIngredientCatalog.length === 0 && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-muted-foreground">
                 No recipe ingredients found. Add ingredients in Recipes first.
               </p>
             )}
 
             {!loading && recipeIngredientCatalog.length > 0 && lowStockItems.length === 0 && (
-              <p className="text-sm text-gray-500">All recipe ingredients are healthy.</p>
+              <p className="text-sm text-gray-500 dark:text-muted-foreground">All recipe ingredients are healthy.</p>
             )}
 
             {!loading &&
               lowStockItems.map((item) => (
                 <div
                   key={item.key}
-                  className="flex justify-between items-center bg-red-50 p-4 rounded-2xl border border-red-100/50"
+                  className="flex justify-between items-center bg-red-50 dark:bg-red-950/20 p-4 rounded-2xl border border-red-100/50 dark:border-red-900/40"
                 >
                   <div className="flex flex-col">
-                    <span className="text-sm font-bold text-gray-700">{item.name}</span>
-                    <span className="text-xs text-gray-500">{item.category}</span>
+                    <span className="text-sm font-bold text-gray-700 dark:text-foreground">{item.name}</span>
+                    <span className="text-xs text-gray-500 dark:text-muted-foreground">{item.category}</span>
                   </div>
                   <span className="flex items-center gap-2">
-                    <span className="text-lg font-black text-red-600">
+                    <span className="text-lg font-black text-red-600 dark:text-red-400">
                       {formatNumber(item.current_stock)}
                     </span>
-                    <span className="text-[#3E2723] font-black uppercase text-[10px] tracking-widest">
+                    <span className="text-[#3E2723] dark:text-amber-400 font-black uppercase text-[10px] tracking-widest">
                       {item.unit}
                     </span>
                   </span>
@@ -1165,7 +1165,7 @@ export function InventoryScreen() {
           </p>
           <button
             onClick={openStockInSelector}
-            className="bg-white text-[#3E2723] px-8 py-3 rounded-2xl font-bold flex items-center gap-2 active:scale-95 transition-all disabled:opacity-70"
+            className="bg-white dark:bg-foreground text-[#3E2723] px-8 py-3 rounded-2xl font-bold flex items-center gap-2 active:scale-95 transition-all disabled:opacity-70"
             disabled={loading || recipeIngredientCatalog.length === 0}
           >
             <PlusCircle size={20} /> New Ingredient
@@ -1174,16 +1174,16 @@ export function InventoryScreen() {
       </div>
 
       {!loading && items.length === 0 && recipeIngredientCatalog.length > 0 && (
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 text-sm text-blue-700 dark:text-blue-400">
           Inventory has no stock records yet. Showing recipe ingredients with zero stock until stock-in is confirmed.
         </div>
       )}
 
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
+      <div className="bg-white dark:bg-card rounded-3xl shadow-sm border border-gray-100 dark:border-border p-8">
         <div className="flex flex-col lg:flex-row justify-between items-center mb-8 gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Ingredients List</h2>
-            <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-foreground tracking-tight">Ingredients List</h2>
+            <p className="text-xs text-gray-400 dark:text-muted-foreground mt-1 uppercase tracking-widest font-bold">
               Recipe-based, de-duplicated catalog
             </p>
           </div>
@@ -1191,7 +1191,7 @@ export function InventoryScreen() {
           <div className="flex gap-3 w-full lg:w-auto">
             <div className="relative flex-1 lg:w-72">
               <Search
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300"
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-muted-foreground"
                 size={18}
               />
               <input
@@ -1202,13 +1202,13 @@ export function InventoryScreen() {
                   setSearchTerm(event.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none"
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-2xl text-sm outline-none"
               />
             </div>
 
             <div className="relative">
               <Filter
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-muted-foreground"
                 size={16}
               />
               <select
@@ -1217,7 +1217,7 @@ export function InventoryScreen() {
                   setFilterType(event.target.value as InventoryFilter);
                   setPage(1);
                 }}
-                className="pl-11 pr-8 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-semibold text-gray-600 appearance-none cursor-pointer outline-none"
+                className="pl-11 pr-8 py-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-2xl text-sm font-semibold text-gray-600 dark:text-muted-foreground appearance-none cursor-pointer outline-none"
               >
                 <option value="all">All Status</option>
                 <option value="healthy">Healthy Only</option>
@@ -1231,7 +1231,7 @@ export function InventoryScreen() {
         </div>
 
         <table className="w-full text-left">
-          <thead className="text-gray-400 text-[10px] uppercase font-bold tracking-widest border-b border-gray-50">
+          <thead className="text-gray-400 dark:text-muted-foreground text-[10px] uppercase font-bold tracking-widest border-b border-gray-50 dark:border-border/50">
             <tr>
               <th className="pb-4 px-2">Name</th>
               <th className="pb-4 px-2">Category</th>
@@ -1242,10 +1242,10 @@ export function InventoryScreen() {
               <th className="pb-4 px-2 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-50 dark:divide-border/50">
             {loading && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-gray-500">
+                <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
                   Loading inventory...
                 </td>
               </tr>
@@ -1253,7 +1253,7 @@ export function InventoryScreen() {
 
             {!loading && recipeIngredientCatalog.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-gray-500">
+                <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
                   No recipe ingredients found. Add ingredients in Recipes tab first.
                 </td>
               </tr>
@@ -1261,7 +1261,7 @@ export function InventoryScreen() {
 
             {!loading && recipeIngredientCatalog.length > 0 && filteredIngredients.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-gray-500">
+                <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
                   No ingredients found.
                 </td>
               </tr>
@@ -1272,21 +1272,21 @@ export function InventoryScreen() {
                 const status = getStatus(item);
 
                 return (
-                  <tr key={item.key} className="group hover:bg-gray-50/50">
-                    <td className="py-6 px-2 font-bold text-gray-800 text-lg tracking-tight">
+                  <tr key={item.key} className="group hover:bg-gray-50 dark:hover:bg-muted/50">
+                    <td className="py-6 px-2 font-bold text-gray-800 dark:text-foreground text-lg tracking-tight">
                       {item.name}
                     </td>
-                    <td className="py-6 px-2 text-sm text-gray-600">{item.category}</td>
-                    <td className="py-6 px-2 text-xs text-gray-500">
+                    <td className="py-6 px-2 text-sm text-gray-600 dark:text-muted-foreground">{item.category}</td>
+                    <td className="py-6 px-2 text-xs text-gray-500 dark:text-muted-foreground">
                       {item.linked_products.join(", ")}
                     </td>
-                    <td className="py-6 px-2 font-bold text-lg text-gray-700">
+                    <td className="py-6 px-2 font-bold text-lg text-gray-700 dark:text-foreground">
                       {formatNumber(item.current_stock)}
-                      <span className="text-[#3E2723] font-black uppercase text-[10px] tracking-widest ml-2">
+                      <span className="text-[#3E2723] dark:text-amber-400 font-black uppercase text-[10px] tracking-widest ml-2">
                         {item.unit}
                       </span>
                     </td>
-                    <td className="py-6 px-2 text-sm font-semibold text-gray-600">
+                    <td className="py-6 px-2 text-sm font-semibold text-gray-600 dark:text-muted-foreground">
                       {formatNumber(item.reorder_threshold)} {item.unit}
                     </td>
                     <td className="py-6 px-2">
@@ -1299,7 +1299,7 @@ export function InventoryScreen() {
                     <td className="py-6 px-2 text-right">
                       <button
                         onClick={() => openManualStockIn(item.key)}
-                        className="bg-gray-100 hover:bg-[#3E2723] hover:text-white text-gray-600 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                        className="bg-gray-100 dark:bg-muted hover:bg-[#3E2723] hover:text-white text-gray-600 dark:text-muted-foreground px-3 py-2 rounded-xl text-xs font-bold transition-all"
                       >
                         Add Stock
                       </button>
@@ -1311,19 +1311,19 @@ export function InventoryScreen() {
         </table>
 
         {!loading && filteredIngredients.length > 0 && (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
-            <span className="text-[11px] text-gray-400 font-bold">
+          <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100 dark:border-border">
+            <span className="text-[11px] text-gray-400 dark:text-muted-foreground font-bold">
               Showing {pageStart}-{pageEnd} of {filteredIngredients.length}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((previousPage) => Math.max(1, previousPage - 1))}
                 disabled={page <= 1}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-muted/50 text-gray-400 dark:text-muted-foreground hover:bg-gray-100 dark:bg-muted disabled:opacity-30 transition-colors"
               >
                 <ChevronLeft size={16} />
               </button>
-              <span className="text-[11px] text-gray-500 font-bold">
+              <span className="text-[11px] text-gray-500 dark:text-muted-foreground font-bold">
                 Page {page} of {totalPages}
               </span>
               <button
@@ -1331,7 +1331,7 @@ export function InventoryScreen() {
                   setPage((previousPage) => Math.min(totalPages, previousPage + 1))
                 }
                 disabled={page >= totalPages}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-muted/50 text-gray-400 dark:text-muted-foreground hover:bg-gray-100 dark:bg-muted disabled:opacity-30 transition-colors"
               >
                 <ChevronRight size={16} />
               </button>
@@ -1341,7 +1341,7 @@ export function InventoryScreen() {
       </div>
 
       {stockInMode === "ai" && aiScanResult && aiLines.length === 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
           AI returned no ingredient lines. Add at least one line manually before confirming.
         </div>
       )}

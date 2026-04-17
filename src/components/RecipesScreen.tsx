@@ -350,15 +350,15 @@ export const RecipesScreen = () => {
     <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 p-2 h-[calc(100vh-120px)] animate-in fade-in duration-500">
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
+          <div className="bg-white dark:bg-card rounded-2xl p-6 w-full max-w-lg shadow-xl">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-xl font-black text-gray-800">Add Product</h3>
+              <h3 className="text-xl font-black text-gray-800 dark:text-foreground">Add Product</h3>
               <button
                 onClick={() => {
                   setIsCreateModalOpen(false);
                   setNewProduct(INITIAL_NEW_PRODUCT);
                 }}
-                className="text-gray-400 hover:text-gray-700 transition-colors"
+                className="text-gray-400 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground transition-colors"
                 type="button"
               >
                 <X size={20} />
@@ -367,7 +367,7 @@ export const RecipesScreen = () => {
 
             <form className="space-y-4" onSubmit={handleCreateProduct}>
               <div>
-                <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-muted-foreground mb-2">
                   Product Name
                 </label>
                 <input
@@ -378,7 +378,7 @@ export const RecipesScreen = () => {
                       name: event.target.value,
                     }))
                   }
-                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
+                  className="w-full p-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
                   placeholder="Example: Iced Mocha"
                   required
                 />
@@ -386,7 +386,7 @@ export const RecipesScreen = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-muted-foreground mb-2">
                     Category
                   </label>
                   <input
@@ -397,12 +397,12 @@ export const RecipesScreen = () => {
                         category: event.target.value,
                       }))
                     }
-                    className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
+                    className="w-full p-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
                     placeholder="Food or Drinks"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-muted-foreground mb-2">
                     Description
                   </label>
                   <input
@@ -413,14 +413,14 @@ export const RecipesScreen = () => {
                         description: event.target.value,
                       }))
                     }
-                    className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
+                    className="w-full p-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
                     placeholder="Optional"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-muted-foreground mb-2">
                   Properties JSON
                 </label>
                 <textarea
@@ -431,7 +431,7 @@ export const RecipesScreen = () => {
                       properties: event.target.value,
                     }))
                   }
-                  className="w-full min-h-28 p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-mono outline-none focus:ring-1 focus:ring-[#3E2723]"
+                  className="w-full min-h-28 p-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-xs font-mono outline-none focus:ring-1 focus:ring-[#3E2723]"
                   placeholder='{"station": "bar"}'
                 />
               </div>
@@ -440,7 +440,7 @@ export const RecipesScreen = () => {
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 text-sm font-bold"
+                  className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground text-sm font-bold"
                   disabled={isCreating}
                 >
                   Cancel
@@ -458,10 +458,10 @@ export const RecipesScreen = () => {
         </div>
       )}
 
-      <div className="w-full lg:w-1/3 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
-        <div className="p-6 border-b border-gray-50 space-y-4">
+      <div className="w-full lg:w-1/3 bg-white dark:bg-card rounded-3xl border border-gray-100 dark:border-border shadow-sm flex flex-col overflow-hidden">
+        <div className="p-6 border-b border-gray-50 dark:border-border/50 space-y-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xl font-bold text-gray-800">Draft Punk Recipes</h2>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-foreground">Draft Punk Recipes</h2>
             <button
               className="inline-flex items-center gap-2 px-3 py-2 bg-[#3E2723] text-white rounded-xl text-xs font-bold"
               onClick={() => setIsCreateModalOpen(true)}
@@ -473,25 +473,25 @@ export const RecipesScreen = () => {
 
           <div className="flex flex-col gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 dark:text-muted-foreground" size={16} />
               <input
                 type="text"
                 placeholder={`Search ${products.length} items...`}
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-1 focus:ring-[#3E2723] outline-none"
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-sm focus:ring-1 focus:ring-[#3E2723] outline-none"
               />
             </div>
 
-            <div className="flex gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="flex gap-2 p-1 bg-gray-50 dark:bg-muted/50 rounded-xl border border-gray-100 dark:border-border">
               {(['all', 'food', 'drink'] as const).map((filter) => (
                 <button
                   key={filter}
                   onClick={() => setActiveFilter(filter)}
                   className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
                     activeFilter === filter
-                      ? 'bg-white text-[#3E2723] shadow-sm'
-                      : 'text-gray-400 hover:text-gray-600'
+                      ? 'bg-white dark:bg-card text-[#3E2723] dark:text-amber-400 shadow-sm'
+                      : 'text-gray-400 dark:text-muted-foreground hover:text-gray-600 dark:hover:text-foreground'
                   }`}
                 >
                   {filter}
@@ -510,17 +510,17 @@ export const RecipesScreen = () => {
                     <div className="w-9 h-9 rounded-lg bg-gray-200 animate-pulse" />
                     <div className="space-y-2">
                       <div className="h-3 w-40 rounded bg-gray-200 animate-pulse" />
-                      <div className="h-2 w-20 rounded bg-gray-100 animate-pulse" />
+                      <div className="h-2 w-20 rounded bg-gray-100 dark:bg-muted animate-pulse" />
                     </div>
                   </div>
-                  <div className="w-4 h-4 rounded bg-gray-100 animate-pulse" />
+                  <div className="w-4 h-4 rounded bg-gray-100 dark:bg-muted animate-pulse" />
                 </div>
               ))}
             </div>
           )}
 
           {!loading && filteredProducts.length === 0 && (
-            <p className="p-6 text-sm text-gray-400 font-semibold">No products found.</p>
+            <p className="p-6 text-sm text-gray-400 dark:text-muted-foreground font-semibold">No products found.</p>
           )}
 
           {!loading &&
@@ -530,8 +530,8 @@ export const RecipesScreen = () => {
                 onClick={() => handleSelectProduct(product.id)}
                 className={`w-full p-5 flex items-center justify-between group transition-all ${
                   selectedProductId === product.id
-                    ? 'bg-[#FFF5F0] border-l-4 border-l-[#3E2723]'
-                    : 'hover:bg-gray-50'
+                    ? 'bg-[#FFF5F0] dark:bg-amber-950/30 border-l-4 border-l-[#3E2723]'
+                    : 'hover:bg-gray-50 dark:hover:bg-muted/50'
                 }`}
               >
                 <div className="flex items-center gap-3 text-left">
@@ -539,7 +539,7 @@ export const RecipesScreen = () => {
                     className={`p-2 rounded-lg transition-colors ${
                       selectedProductId === product.id
                         ? 'bg-[#3E2723] text-white'
-                        : 'bg-gray-100 text-gray-400'
+                        : 'bg-gray-100 dark:bg-muted text-gray-400 dark:text-muted-foreground'
                     }`}
                   >
                     {product.category.toLowerCase().includes('drink') ? (
@@ -549,10 +549,10 @@ export const RecipesScreen = () => {
                     )}
                   </div>
                   <div>
-                    <p className="font-bold text-gray-800 text-sm tracking-tight">
+                    <p className="font-bold text-gray-800 dark:text-foreground text-sm tracking-tight">
                       {product.name}
                     </p>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                    <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                       {product.category}
                     </p>
                   </div>
@@ -560,7 +560,7 @@ export const RecipesScreen = () => {
                 <ChevronRight
                   size={16}
                   className={
-                    selectedProductId === product.id ? 'text-[#3E2723]' : 'text-gray-200'
+                    selectedProductId === product.id ? 'text-[#3E2723]' : 'text-gray-200 dark:text-muted-foreground'
                   }
                 />
               </button>
@@ -568,29 +568,29 @@ export const RecipesScreen = () => {
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+      <div className="flex-1 bg-white dark:bg-card rounded-3xl border border-gray-100 dark:border-border shadow-sm flex flex-col overflow-hidden">
         {loading && (
           <>
-            <div className="p-8 border-b border-gray-50 bg-gray-50/20">
-              <div className="h-10 w-80 max-full rounded-xl bg-gray-200 animate-pulse" />
-              <div className="h-3 w-64 max-full rounded mt-3 bg-gray-100 animate-pulse" />
+            <div className="p-8 border-b border-gray-50 dark:border-border/50 bg-gray-50 dark:bg-muted/30">
+              <div className="h-10 w-80 max-full rounded-xl bg-gray-200 dark:bg-muted animate-pulse" />
+              <div className="h-3 w-64 max-full rounded mt-3 bg-gray-100 dark:bg-muted animate-pulse" />
 
               <div className="flex flex-wrap gap-3 mt-7">
-                <div className="h-12 w-40 rounded-2xl bg-gray-200 animate-pulse" />
-                <div className="h-12 w-40 rounded-2xl bg-gray-100 animate-pulse" />
+                <div className="h-12 w-40 rounded-2xl bg-gray-200 dark:bg-muted animate-pulse" />
+                <div className="h-12 w-40 rounded-2xl bg-gray-100 dark:bg-muted animate-pulse" />
               </div>
             </div>
 
             <div className="p-8 flex-1 overflow-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="text-[10px] font-bold text-gray-300 uppercase tracking-widest border-b border-gray-100">
+                  <tr className="text-[10px] font-bold text-gray-300 dark:text-muted-foreground uppercase tracking-widest border-b border-gray-100 dark:border-border">
                     <th className="pb-4 px-2">Ingredient Name</th>
                     <th className="pb-4 px-2 w-36">Qty</th>
                     <th className="pb-4 px-2 w-32">Unit</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-border/50">
                   {Array.from({ length: SKELETON_INGREDIENT_ROWS }).map((_, index) => (
                     <tr key={`ingredient-skeleton-${index}`}>
                       <td className="py-5 px-2">
@@ -600,7 +600,7 @@ export const RecipesScreen = () => {
                         <div className="h-8 w-20 rounded-xl bg-gray-200 animate-pulse" />
                       </td>
                       <td className="py-5 px-2">
-                        <div className="h-4 w-14 rounded bg-gray-100 animate-pulse" />
+                        <div className="h-4 w-14 rounded bg-gray-100 dark:bg-muted animate-pulse" />
                       </td>
                     </tr>
                   ))}
@@ -612,8 +612,8 @@ export const RecipesScreen = () => {
 
         {!selectedProduct && !loading && (
           <div className="p-8 h-full flex flex-col items-center justify-center text-center">
-            <h3 className="text-xl font-black text-gray-800">No Product Selected</h3>
-            <p className="text-sm text-gray-400 mt-2 mb-6">
+            <h3 className="text-xl font-black text-gray-800 dark:text-foreground">No Product Selected</h3>
+            <p className="text-sm text-gray-400 dark:text-muted-foreground mt-2 mb-6">
               Add your first product to start managing recipe ingredients.
             </p>
             <button
@@ -628,7 +628,7 @@ export const RecipesScreen = () => {
 
         {!loading && selectedProduct && (
           <>
-            <div className="p-8 border-b border-gray-50 bg-gray-50/20 space-y-4">
+            <div className="p-8 border-b border-gray-50 dark:border-border/50 bg-gray-50 dark:bg-muted/30 space-y-4">
               {selectedForView ? (
                 <>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -637,14 +637,14 @@ export const RecipesScreen = () => {
                       onChange={(event) =>
                         handleChangeDraftField('name', event.target.value)
                       }
-                      className="w-full p-3 rounded-xl border border-gray-200 bg-white text-2xl font-black tracking-tight text-gray-800 outline-none focus:ring-1 focus:ring-[#3E2723]"
+                      className="w-full p-3 rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card text-2xl font-black tracking-tight text-gray-800 dark:text-foreground outline-none focus:ring-1 focus:ring-[#3E2723]"
                     />
                     <input
                       value={selectedForView.category}
                       onChange={(event) =>
                         handleChangeDraftField('category', event.target.value)
                       }
-                      className="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 outline-none focus:ring-1 focus:ring-[#3E2723]"
+                      className="w-full p-3 rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card text-sm font-bold text-gray-700 dark:text-foreground outline-none focus:ring-1 focus:ring-[#3E2723]"
                     />
                   </div>
 
@@ -653,11 +653,11 @@ export const RecipesScreen = () => {
                     onChange={(event) =>
                       handleChangeDraftField('description', event.target.value)
                     }
-                    className="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 outline-none focus:ring-1 focus:ring-[#3E2723]"
+                    className="w-full p-3 rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card text-sm text-gray-700 dark:text-foreground outline-none focus:ring-1 focus:ring-[#3E2723]"
                     placeholder="Description (optional)"
                   />
 
-                  <label className="inline-flex items-center gap-3 text-sm font-bold text-gray-700">
+                  <label className="inline-flex items-center gap-3 text-sm font-bold text-gray-700 dark:text-foreground">
                     <input
                       type="checkbox"
                       checked={selectedForView.is_active}
@@ -671,14 +671,14 @@ export const RecipesScreen = () => {
               ) : (
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div>
-                    <h1 className="text-3xl font-black text-gray-800 tracking-tighter uppercase">
+                    <h1 className="text-3xl font-black text-gray-800 dark:text-foreground tracking-tighter uppercase">
                       {selectedProduct.name}
                     </h1>
-                    <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1">
+                    <p className="text-gray-400 dark:text-muted-foreground text-xs font-bold uppercase tracking-widest mt-1">
                       {selectedProduct.category} • Bill of Materials Management
                     </p>
                     {selectedProduct.description && (
-                      <p className="text-sm text-gray-500 mt-2 max-w-2xl">
+                      <p className="text-sm text-gray-500 dark:text-muted-foreground mt-2 max-w-2xl">
                         {selectedProduct.description}
                       </p>
                     )}
@@ -704,7 +704,7 @@ export const RecipesScreen = () => {
                     <button
                       onClick={handleDeleteProduct}
                       disabled={saving}
-                      className="flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all active:scale-95 bg-red-100 text-red-600 disabled:opacity-50"
+                      className="flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all active:scale-95 bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 disabled:opacity-50"
                       type="button"
                     >
                       <Trash2 size={18} /> Delete Product
@@ -723,7 +723,7 @@ export const RecipesScreen = () => {
                     <button
                       onClick={handleCancelEdit}
                       disabled={saving}
-                      className="flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all active:scale-95 bg-gray-100 text-gray-600 disabled:opacity-50"
+                      className="flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all active:scale-95 bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground disabled:opacity-50"
                       type="button"
                     >
                       <X size={18} /> Cancel
@@ -735,7 +735,7 @@ export const RecipesScreen = () => {
 
             <div className="p-8 flex-1 overflow-auto">
               {(error || actionError) && (
-                <div className="mb-6 p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm flex items-start gap-2">
+                <div className="mb-6 p-4 rounded-xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
                   <AlertTriangle size={16} className="mt-0.5" />
                   <span>{actionError ?? error}</span>
                 </div>
@@ -743,17 +743,17 @@ export const RecipesScreen = () => {
 
               <table className="w-full text-left">
                 <thead>
-                  <tr className="text-[10px] font-bold text-gray-300 uppercase tracking-widest border-b border-gray-100">
+                  <tr className="text-[10px] font-bold text-gray-300 dark:text-muted-foreground uppercase tracking-widest border-b border-gray-100 dark:border-border">
                     <th className="pb-4 px-2">Ingredient Name</th>
                     <th className="pb-4 px-2 w-36">Qty</th>
                     <th className="pb-4 px-2 w-32">Unit</th>
                     {isEditing && <th className="pb-4 px-2 w-20 text-right">Action</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-border/50">
                   {(selectedForView?.ingredients ?? selectedProduct.ingredients).map((ingredient) => (
                     <tr key={ingredient.id} className="group">
-                      <td className="py-5 px-2 font-bold text-gray-700 text-lg tracking-tight">
+                      <td className="py-5 px-2 font-bold text-gray-700 dark:text-foreground text-lg tracking-tight">
                         {isEditing && selectedForView ? (
                           <input
                             type="text"
@@ -765,7 +765,7 @@ export const RecipesScreen = () => {
                                 event.target.value
                               )
                             }
-                            className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-1 focus:ring-[#3E2723]"
+                            className="w-full p-2 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl text-sm font-bold outline-none focus:ring-1 focus:ring-[#3E2723]"
                           />
                         ) : (
                           ingredient.name
@@ -784,10 +784,10 @@ export const RecipesScreen = () => {
                                 event.target.value
                               )
                             }
-                            className="w-28 p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold text-center outline-none focus:ring-1 focus:ring-[#3E2723]"
+                            className="w-28 p-2 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl font-bold text-center outline-none focus:ring-1 focus:ring-[#3E2723]"
                           />
                         ) : (
-                          <span className="font-mono font-black text-2xl text-[#3E2723]">
+                          <span className="font-mono font-black text-2xl text-[#3E2723] dark:text-amber-400">
                             {typeof ingredient.quantity === 'number'
                               ? formatQuantity(ingredient.quantity)
                               : ingredient.quantity}
@@ -806,10 +806,10 @@ export const RecipesScreen = () => {
                                 event.target.value
                               )
                             }
-                            className="w-24 p-2 bg-gray-50 border border-gray-200 rounded-xl font-bold text-center uppercase outline-none focus:ring-1 focus:ring-[#3E2723]"
+                            className="w-24 p-2 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl font-bold text-center uppercase outline-none focus:ring-1 focus:ring-[#3E2723]"
                           />
                         ) : (
-                          <span className="inline-flex items-center text-[#3E2723] font-black uppercase text-[10px] tracking-widest">
+                          <span className="inline-flex items-center text-[#3E2723] dark:text-amber-400 font-black uppercase text-[10px] tracking-widest">
                             {ingredient.unit}
                           </span>
                         )}
@@ -819,7 +819,7 @@ export const RecipesScreen = () => {
                           <button
                             type="button"
                             onClick={() => handleDeleteIngredient(ingredient.id)}
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600"
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:bg-red-100 hover:text-red-600"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -830,7 +830,7 @@ export const RecipesScreen = () => {
 
                   {!isEditing && selectedProduct.ingredients.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="py-10 text-center text-sm font-semibold text-gray-400">
+                      <td colSpan={3} className="py-10 text-center text-sm font-semibold text-gray-400 dark:text-muted-foreground">
                         No ingredients yet.
                       </td>
                     </tr>
@@ -842,7 +842,7 @@ export const RecipesScreen = () => {
                 <>
                   <div className="mt-8 flex gap-4">
                     <button
-                      className="flex items-center gap-2 text-gray-400 font-bold text-xs hover:text-[#3E2723] transition-colors"
+                      className="flex items-center gap-2 text-gray-400 dark:text-muted-foreground font-bold text-xs hover:text-[#3E2723] transition-colors"
                       onClick={handleAddIngredient}
                       type="button"
                     >
@@ -851,7 +851,7 @@ export const RecipesScreen = () => {
                   </div>
 
                   <div className="mt-8">
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-muted-foreground mb-2">
                       Product Properties JSON
                     </label>
                     <textarea
@@ -859,7 +859,7 @@ export const RecipesScreen = () => {
                       onChange={(event) =>
                         handleChangeDraftField('properties', event.target.value)
                       }
-                      className="w-full min-h-36 p-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-mono text-gray-700 outline-none focus:ring-1 focus:ring-[#3E2723]"
+                      className="w-full min-h-36 p-3 rounded-xl border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/50 text-xs font-mono text-gray-700 dark:text-foreground outline-none focus:ring-1 focus:ring-[#3E2723]"
                       placeholder='{"station": "kitchen", "tag": "seasonal"}'
                     />
                   </div>

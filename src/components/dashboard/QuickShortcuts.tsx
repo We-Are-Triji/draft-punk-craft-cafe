@@ -27,7 +27,7 @@ const shortcutItems: ShortcutItem[] = [
     description: "Open Inventory and use AI or manual stock-in quickly.",
     tab: "inventory",
     icon: Package,
-    style: "bg-cyan-50 text-cyan-700 border-cyan-100",
+    style: "bg-cyan-50 dark:bg-cyan-950/30 text-cyan-700 dark:text-cyan-400 border-cyan-100 dark:border-cyan-900/30",
   },
   {
     id: "stock-out",
@@ -35,7 +35,7 @@ const shortcutItems: ShortcutItem[] = [
     description: "Open Transactions and create stock-out via AI scan or manual entry.",
     tab: "transactions",
     icon: Camera,
-    style: "bg-amber-50 text-amber-700 border-amber-100",
+    style: "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-900/30",
   },
   {
     id: "transactions",
@@ -43,7 +43,7 @@ const shortcutItems: ShortcutItem[] = [
     description: "Review recent operations and ingredient-level movements.",
     tab: "transactions",
     icon: Receipt,
-    style: "bg-blue-50 text-blue-700 border-blue-100",
+    style: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-100 dark:border-blue-900/30",
   },
   {
     id: "recipes",
@@ -51,7 +51,7 @@ const shortcutItems: ShortcutItem[] = [
     description: "Manage product recipes that drive stock-in and stock-out matching.",
     tab: "recipes",
     icon: ClipboardList,
-    style: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    style: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30",
   },
 ];
 
@@ -69,7 +69,7 @@ export function QuickShortcuts({ onNavigate }: QuickShortcutsProps) {
             key={item.id}
             type="button"
             onClick={() => onNavigate?.(item.tab)}
-            className="min-w-0 rounded-2xl border border-border bg-card text-left p-4 hover:shadow-md transition-shadow disabled:opacity-60"
+            className="min-w-0 rounded-2xl border border-border bg-card dark:bg-card text-left p-4 hover:shadow-md transition-shadow disabled:opacity-60"
             disabled={!onNavigate}
           >
             <div className="flex items-start justify-between gap-3 min-w-0">

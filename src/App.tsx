@@ -6,6 +6,7 @@ import { InventoryScreen } from "@/components/InventoryScreen";
 import { RecipesScreen } from "@/components/RecipesScreen";
 import { TransactionsScreen } from "@/components/TransactionsScreen";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useTheme } from "@/hooks/useTheme";
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -13,6 +14,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -76,7 +78,7 @@ function App() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} userName={userName} userEmail={userEmail} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
       <main className="flex-1 p-6 overflow-auto">
         {activeTab === "dashboard" && <DashboardScreen onNavigate={setActiveTab} />}
         {activeTab === "inventory" && <InventoryScreen />}
