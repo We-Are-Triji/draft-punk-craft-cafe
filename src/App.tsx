@@ -57,7 +57,7 @@ function App() {
     <div className="flex min-h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="flex-1 p-6 overflow-auto">
-        {activeTab === "dashboard" && <DashboardScreen />}
+        {activeTab === "dashboard" && <DashboardScreen onNavigate={setActiveTab} />}
         {activeTab === "inventory" && <InventoryScreen />}
         {activeTab === "transactions" && <TransactionsScreen />}
         {activeTab === "recipes" && <RecipesScreen />}

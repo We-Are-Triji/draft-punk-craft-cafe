@@ -1,16 +1,23 @@
 import { WelcomeBanner } from "@/components/dashboard/WelcomeBanner";
+import { QuickShortcuts } from "@/components/dashboard/QuickShortcuts";
 import { StatsCards } from "@/components/dashboard/StatsCards";
 import { StockLevelChart } from "@/components/dashboard/StockLevelChart";
 import { TopDishesChart } from "@/components/dashboard/TopDishesChart";
 import { QuickInsights } from "@/components/dashboard/QuickInsights";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
+import type { Tab } from "@/components/layout/Sidebar";
 
-export function DashboardScreen() {
+interface DashboardScreenProps {
+  onNavigate?: (tab: Tab) => void;
+}
+
+export function DashboardScreen({ onNavigate }: DashboardScreenProps) {
   const { metrics, loading, error } = useDashboardMetrics();
 
   return (
     <div className="flex flex-col gap-6">
       <WelcomeBanner />
+      <QuickShortcuts onNavigate={onNavigate} />
 
       {error ? (
         <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -36,6 +36,37 @@ interface GeminiDetectionResult {
   ingredients_to_deduct: IngredientDeduction[];
 }
 
+interface GeminiRequestErrorShape {
+  status: number;
+  message: string;
+  model: string;
+}
+
+export interface GeminiUsageSnapshot {
+  queued_requests: number;
+  total_requests: number;
+  total_network_attempts: number;
+  total_retries: number;
+  total_failures: number;
+  last_model: string | null;
+  last_error: string | null;
+  model_cooldowns: Record<string, number>;
+}
+
+const modelCooldownUntil = new Map<string, number>();
+let lastRequestStartAt = 0;
+let requestQueueTail: Promise<void> = Promise.resolve();
+let queuedRequests = 0;
+
+const geminiUsageState = {
+  total_requests: 0,
+  total_network_attempts: 0,
+  total_retries: 0,
+  total_failures: 0,
+  last_model: null as string | null,
+  last_error: null as string | null,
+};
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;
@@ -154,13 +185,119 @@ function getGeminiErrorMessage(payload: unknown): string | null {
   return null;
 }
 
-export async function detectIngredientsWithGemini(
-  file: File
-): Promise<GeminiDetectionResult> {
-  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
 
-  const endpoint = `${GEMINI_API_BASE}/models/${appEnv.geminiModel}:generateContent?key=${appEnv.geminiApiKey}`;
-  const imageBase64 = arrayBufferToBase64(await file.arrayBuffer());
+function getCandidateModels(): string[] {
+  const modelSet = new Set<string>();
+
+  if (appEnv.geminiModel.trim()) {
+    modelSet.add(appEnv.geminiModel.trim());
+  }
+
+  for (const fallbackModel of appEnv.geminiFallbackModels) {
+    if (fallbackModel.trim()) {
+      modelSet.add(fallbackModel.trim());
+    }
+  }
+
+  if (modelSet.size === 0) {
+    modelSet.add("gemini-2.0-flash");
+  }
+
+  return [...modelSet];
+}
+
+function getCooldownWaitMs(models: string[]): number {
+  const now = Date.now();
+  let nearestWaitMs: number | null = null;
+
+  for (const model of models) {
+    const cooldownUntil = modelCooldownUntil.get(model) ?? 0;
+
+    if (cooldownUntil <= now) {
+      return 0;
+    }
+
+    const waitMs = cooldownUntil - now;
+
+    if (nearestWaitMs === null || waitMs < nearestWaitMs) {
+      nearestWaitMs = waitMs;
+    }
+  }
+
+  return nearestWaitMs ?? 0;
+}
+
+async function waitForRequestSlot(): Promise<void> {
+  const queueEntry = requestQueueTail;
+  let releaseQueue: () => void = () => {};
+
+  requestQueueTail = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
+
+  queuedRequests += 1;
+
+  await queueEntry;
+
+  try {
+    const now = Date.now();
+    const waitMs = Math.max(
+      0,
+      lastRequestStartAt + appEnv.geminiMinRequestIntervalMs - now
+    );
+
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
+
+    lastRequestStartAt = Date.now();
+  } finally {
+    queuedRequests = Math.max(0, queuedRequests - 1);
+    releaseQueue();
+  }
+}
+
+function toGeminiRequestErrorShape(
+  error: unknown,
+  model: string
+): GeminiRequestErrorShape {
+  if (
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    "message" in error
+  ) {
+    return {
+      status: Number((error as { status: unknown }).status),
+      message: String((error as { message: unknown }).message),
+      model,
+    };
+  }
+
+  return {
+    status: 0,
+    message: error instanceof Error ? error.message : "Unknown Gemini error.",
+    model,
+  };
+}
+
+async function requestGeminiResponsePayload(
+  file: File,
+  imageBase64: string,
+  model: string
+): Promise<unknown> {
+  const endpoint = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${appEnv.geminiApiKey}`;
+
+  await waitForRequestSlot();
+
+  geminiUsageState.total_network_attempts += 1;
+  geminiUsageState.last_model = model;
+
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -190,16 +327,29 @@ export async function detectIngredientsWithGemini(
 
   if (!response.ok) {
     const geminiError = getGeminiErrorMessage(responsePayload);
+    const errorMessage =
+      geminiError ?? `Gemini API error for model ${model} (status ${response.status}).`;
 
-    throw new Error(
-      `Gemini request failed (${response.status}): ${geminiError ?? "Unknown Gemini API error."}`
-    );
+    throw {
+      status: response.status,
+      message: errorMessage,
+      model,
+    };
   }
 
-  const responseText =
-    responsePayload?.candidates?.[0]?.content?.parts?.find(
+  return responsePayload;
+}
+
+function parseGeminiResponsePayload(payload: unknown): GeminiDetectionResult {
+  const responseTextCandidate =
+    (payload as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }>;
+    })?.candidates?.[0]?.content?.parts?.find(
       (part: { text?: unknown }) => typeof part.text === "string"
-    )?.text ?? "";
+    )?.text;
+
+  const responseText =
+    typeof responseTextCandidate === "string" ? responseTextCandidate : "";
 
   if (!responseText) {
     throw new Error("Gemini returned an empty response.");
@@ -231,4 +381,96 @@ export async function detectIngredientsWithGemini(
       fallbackIngredient
     ),
   };
+}
+
+export function getGeminiUsageSnapshot(): GeminiUsageSnapshot {
+  const modelCooldowns: Record<string, number> = {};
+
+  for (const [model, cooldownUntil] of modelCooldownUntil.entries()) {
+    modelCooldowns[model] = cooldownUntil;
+  }
+
+  return {
+    queued_requests: queuedRequests,
+    total_requests: geminiUsageState.total_requests,
+    total_network_attempts: geminiUsageState.total_network_attempts,
+    total_retries: geminiUsageState.total_retries,
+    total_failures: geminiUsageState.total_failures,
+    last_model: geminiUsageState.last_model,
+    last_error: geminiUsageState.last_error,
+    model_cooldowns: modelCooldowns,
+  };
+}
+
+export async function detectIngredientsWithGemini(
+  file: File
+): Promise<GeminiDetectionResult> {
+  assertRuntimeEnv(["VITE_GEMINI_API_KEY"]);
+
+  geminiUsageState.total_requests += 1;
+  const imageBase64 = arrayBufferToBase64(await file.arrayBuffer());
+  const candidateModels = getCandidateModels();
+  let modelsToTry = candidateModels.filter(
+    (model) => (modelCooldownUntil.get(model) ?? 0) <= Date.now()
+  );
+
+  if (modelsToTry.length === 0) {
+    const waitMs = getCooldownWaitMs(candidateModels);
+
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
+
+    modelsToTry = [...candidateModels];
+  }
+
+  const maxRetries = Math.max(0, appEnv.geminiMaxRetries);
+  let lastError: GeminiRequestErrorShape | null = null;
+
+  for (const model of modelsToTry) {
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const responsePayload = await requestGeminiResponsePayload(
+          file,
+          imageBase64,
+          model
+        );
+
+        geminiUsageState.last_error = null;
+        return parseGeminiResponsePayload(responsePayload);
+      } catch (error) {
+        const normalizedError = toGeminiRequestErrorShape(error, model);
+        lastError = normalizedError;
+        geminiUsageState.last_error = normalizedError.message;
+
+        const isRateLimited = normalizedError.status === 429;
+        const isTransientError =
+          normalizedError.status >= 500 || normalizedError.status === 0;
+        const canRetry = attempt < maxRetries && (isRateLimited || isTransientError);
+
+        if (canRetry) {
+          geminiUsageState.total_retries += 1;
+          const retryDelayMs = Math.min(4_000, 600 * (attempt + 1));
+          await delay(retryDelayMs);
+          continue;
+        }
+
+        if (isRateLimited) {
+          modelCooldownUntil.set(model, Date.now() + appEnv.geminiCooldownMs);
+        }
+
+        break;
+      }
+    }
+  }
+
+  geminiUsageState.total_failures += 1;
+
+  if (lastError) {
+    throw new Error(
+      `Gemini request failed (${lastError.status || "network"}) on model ${lastError.model}: ${lastError.message}`
+    );
+  }
+
+  throw new Error("Gemini request failed: all models are unavailable.");
 }

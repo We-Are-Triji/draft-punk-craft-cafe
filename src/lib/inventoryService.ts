@@ -1,5 +1,8 @@
 import { appEnv } from "@/lib/env";
-import { detectIngredientsWithGemini } from "@/lib/geminiClient";
+import {
+  detectIngredientsWithGemini,
+  getGeminiUsageSnapshot,
+} from "@/lib/geminiClient";
 import {
   getCachedImageResult,
   hashImageFile,
@@ -64,6 +67,8 @@ const recipeTemplates: Record<string, IngredientDeduction[]> = {
     },
   ],
 };
+
+const scansInFlightByHash = new Map<string, Promise<ScanDetectionResult>>();
 
 interface ConfirmScanDeductionInput {
   detection: ScanDetectionResult;
@@ -575,76 +580,106 @@ export async function recordManualStockIn({
 
 export async function scanImageForDeduction(file: File): Promise<ScanDetectionResult> {
   const imageHash = await hashImageFile(file);
-  const cachedResult = await getCachedImageResult(imageHash);
+  const inFlightScan = scansInFlightByHash.get(imageHash);
 
-  if (cachedResult) {
-    const fallbackIngredients = buildFallbackIngredients(
-      cachedResult.item_name,
-      cachedResult.category,
-      cachedResult.quantity_estimate,
-      cachedResult.unit
-    );
-
-    const resolvedIngredients = shouldUseRecipeTemplate(
-      cachedResult.item_name,
-      fallbackIngredients
-    )
-      ? applyRecipeTemplate(
-          cachedResult.item_name,
-          cachedResult.quantity_estimate,
-          fallbackIngredients
-        )
-      : fallbackIngredients;
-
-    return {
-      ...cachedResult,
-      source: "cache",
-      ingredients_to_deduct: resolvedIngredients,
-    };
+  if (inFlightScan) {
+    return inFlightScan;
   }
 
-  const detectedResult = await detectIngredientsWithGemini(file);
-  const shouldUseTemplate = shouldUseRecipeTemplate(
-    detectedResult.item_name,
-    detectedResult.ingredients_to_deduct
-  );
-  const ingredientsToDeduct = shouldUseTemplate
-    ? applyRecipeTemplate(
-        detectedResult.item_name,
-        detectedResult.quantity_estimate,
-        detectedResult.ingredients_to_deduct
-      )
-    : detectedResult.ingredients_to_deduct;
+  const scanTask = (async () => {
+    const cachedResult = await getCachedImageResult(imageHash);
 
-  const scanResult: ScanDetectionResult = {
-    image_hash: imageHash,
-    item_name: detectedResult.item_name,
-    category: detectedResult.category,
-    confidence: detectedResult.confidence,
-    quantity_estimate: detectedResult.quantity_estimate,
-    unit: detectedResult.unit,
-    source: "gemini",
-    ingredients_to_deduct: ingredientsToDeduct,
-  };
+    if (cachedResult) {
+      const fallbackIngredients = buildFallbackIngredients(
+        cachedResult.item_name,
+        cachedResult.category,
+        cachedResult.quantity_estimate,
+        cachedResult.unit
+      );
+
+      const resolvedIngredients = shouldUseRecipeTemplate(
+        cachedResult.item_name,
+        fallbackIngredients
+      )
+        ? applyRecipeTemplate(
+            cachedResult.item_name,
+            cachedResult.quantity_estimate,
+            fallbackIngredients
+          )
+        : fallbackIngredients;
+
+      return {
+        ...cachedResult,
+        source: "cache" as const,
+        ingredients_to_deduct: resolvedIngredients,
+      };
+    }
+
+    const detectedResult = await detectIngredientsWithGemini(file);
+    const shouldUseTemplate = shouldUseRecipeTemplate(
+      detectedResult.item_name,
+      detectedResult.ingredients_to_deduct
+    );
+    const ingredientsToDeduct = shouldUseTemplate
+      ? applyRecipeTemplate(
+          detectedResult.item_name,
+          detectedResult.quantity_estimate,
+          detectedResult.ingredients_to_deduct
+        )
+      : detectedResult.ingredients_to_deduct;
+
+    const scanResult: ScanDetectionResult = {
+      image_hash: imageHash,
+      item_name: detectedResult.item_name,
+      category: detectedResult.category,
+      confidence: detectedResult.confidence,
+      quantity_estimate: detectedResult.quantity_estimate,
+      unit: detectedResult.unit,
+      source: "gemini",
+      ingredients_to_deduct: ingredientsToDeduct,
+    };
+
+    try {
+      await upsertCachedImageResult({
+        image_hash: imageHash,
+        item_name: scanResult.item_name,
+        category: scanResult.category,
+        confidence: scanResult.confidence,
+        quantity_estimate: scanResult.quantity_estimate,
+        unit: scanResult.unit,
+      });
+    } catch (error) {
+      console.warn(
+        error instanceof Error
+          ? error.message
+          : "Image cache write failed for unknown reason."
+      );
+    }
+
+    return scanResult;
+  })();
+
+  scansInFlightByHash.set(imageHash, scanTask);
 
   try {
-    await upsertCachedImageResult({
-      image_hash: imageHash,
-      item_name: scanResult.item_name,
-      category: scanResult.category,
-      confidence: scanResult.confidence,
-      quantity_estimate: scanResult.quantity_estimate,
-      unit: scanResult.unit,
-    });
-  } catch (error) {
-    console.warn(
-      error instanceof Error
-        ? error.message
-        : "Image cache write failed for unknown reason."
-    );
-  }
+    return await scanTask;
+  } finally {
+    const activeTask = scansInFlightByHash.get(imageHash);
 
-  return scanResult;
+    if (activeTask === scanTask) {
+      scansInFlightByHash.delete(imageHash);
+    }
+  }
+}
+
+export function getStockScanDiagnostics(): {
+  in_flight_scan_count: number;
+  gemini: ReturnType<typeof getGeminiUsageSnapshot>;
+} {
+  return {
+    in_flight_scan_count: scansInFlightByHash.size,
+    gemini: getGeminiUsageSnapshot(),
+  };
 }
 
 export async function confirmScanDeduction({
