@@ -154,7 +154,7 @@ function getOperationBadgeClass(operationType: OperationType): string {
     return "bg-orange-100 text-orange-700";
   }
 
-  return "bg-gray-100 text-gray-600";
+  return "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground";
 }
 
 function isSupportedImageFile(imageFile: File): boolean {
@@ -700,18 +700,18 @@ export function TransactionsScreen() {
     <div className="w-full max-w-7xl mx-auto flex flex-col gap-4 p-2 animate-in fade-in duration-500">
       {isCreateOptionsOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4">
+          <div className="bg-white dark:bg-card rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-800">Create Stock Out Transaction</h3>
-                <p className="text-sm text-gray-500 mt-1">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-foreground">Create Stock Out Transaction</h3>
+                <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">
                   Choose manual sale entry or AI image scan with human review.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeCreateOptionsModal}
-                className="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground"
               >
                 <XCircle size={18} />
               </button>
@@ -721,10 +721,10 @@ export function TransactionsScreen() {
               <button
                 type="button"
                 onClick={openManualCreateModal}
-                className="w-full text-left p-4 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/50 hover:bg-gray-100 dark:hover:bg-muted transition-colors"
               >
-                <p className="font-bold text-gray-800">Manual Sale Entry</p>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="font-bold text-gray-800 dark:text-foreground">Manual Sale Entry</p>
+                <p className="text-xs text-gray-600 dark:text-muted-foreground mt-1">
                   Pick product, quantity, and optional price. Uses recipe stock checker.
                 </p>
               </button>
@@ -732,10 +732,10 @@ export function TransactionsScreen() {
               <button
                 type="button"
                 onClick={openAiStockOutModal}
-                className="w-full text-left p-4 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors"
+                className="w-full text-left p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
               >
-                <p className="font-bold text-gray-800">AI Scan Stock Out</p>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="font-bold text-gray-800 dark:text-foreground">AI Scan Stock Out</p>
+                <p className="text-xs text-gray-600 dark:text-muted-foreground mt-1">
                   Scan product image, review AI product match, then confirm sale.
                 </p>
               </button>
@@ -746,17 +746,17 @@ export function TransactionsScreen() {
 
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-6xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-white dark:bg-card rounded-2xl w-full max-w-6xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 dark:border-border flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-black text-gray-800">Record Manual Sale Transaction</h3>
-                <p className="text-sm text-gray-500 mt-1">
+                <h3 className="text-xl font-black text-gray-800 dark:text-foreground">Record Manual Sale Transaction</h3>
+                <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">
                   Choose product, set quantity and optional price, then confirm with stock checks.
                 </p>
               </div>
               <button
                 onClick={closeManualCreateModal}
-                className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                className="p-2 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground"
                 disabled={isSubmitting}
               >
                 <XCircle size={18} />
@@ -769,10 +769,10 @@ export function TransactionsScreen() {
             >
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-black text-gray-700 uppercase tracking-wider">
+                  <h4 className="text-sm font-black text-gray-700 dark:text-foreground uppercase tracking-wider">
                     Choose Product
                   </h4>
-                  <span className="text-xs text-gray-400 font-bold">
+                  <span className="text-xs text-gray-400 dark:text-muted-foreground font-bold">
                     {filteredProducts.length} found
                   </span>
                 </div>
@@ -780,20 +780,20 @@ export function TransactionsScreen() {
                 <div className="flex gap-3">
                   <div className="relative flex-1">
                     <Search
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 dark:text-muted-foreground"
                       size={16}
                     />
                     <input
                       value={productSearch}
                       onChange={(event) => setProductSearch(event.target.value)}
                       placeholder="Search product"
-                      className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
+                      className="w-full pl-9 pr-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#3E2723]"
                     />
                   </div>
                   <select
                     value={categoryFilter}
                     onChange={(event) => setCategoryFilter(event.target.value)}
-                    className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                    className="px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                   >
                     {productCategories.map((category) => (
                       <option key={category} value={category}>
@@ -803,11 +803,11 @@ export function TransactionsScreen() {
                   </select>
                 </div>
 
-                <div className="rounded-xl border border-gray-100 overflow-auto max-h-[360px]">
+                <div className="rounded-xl border border-gray-100 dark:border-border overflow-auto max-h-[360px]">
                   {productsLoading ? (
-                    <div className="p-6 text-sm text-gray-500">Loading products...</div>
+                    <div className="p-6 text-sm text-gray-500 dark:text-muted-foreground">Loading products...</div>
                   ) : filteredProducts.length === 0 ? (
-                    <div className="p-6 text-sm text-gray-500">No products matched your search.</div>
+                    <div className="p-6 text-sm text-gray-500 dark:text-muted-foreground">No products matched your search.</div>
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {filteredProducts.map((product) => (
@@ -817,17 +817,17 @@ export function TransactionsScreen() {
                           onClick={() => setSelectedProductId(product.id)}
                           className={`w-full text-left p-4 transition-colors ${
                             selectedProductId === product.id
-                              ? "bg-[#FFF5F0]"
-                              : "hover:bg-gray-50"
+                              ? "bg-[#FFF5F0] dark:bg-amber-950/30"
+                              : "hover:bg-gray-50 dark:hover:bg-muted/50"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-bold text-gray-800">{product.name}</span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                            <span className="text-sm font-bold text-gray-800 dark:text-foreground">{product.name}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-muted-foreground">
                               {product.category}
                             </span>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-gray-500 dark:text-muted-foreground mt-1">
                             {product.ingredients.length} ingredient(s) in recipe
                           </p>
                         </button>
@@ -838,26 +838,26 @@ export function TransactionsScreen() {
               </div>
 
               <div className="space-y-4">
-                <h4 className="text-sm font-black text-gray-700 uppercase tracking-wider">
+                <h4 className="text-sm font-black text-gray-700 dark:text-foreground uppercase tracking-wider">
                   Transaction Details
                 </h4>
 
                 {!selectedProduct ? (
-                  <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+                  <div className="rounded-xl border border-dashed border-gray-200 dark:border-border p-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
                     Pick a product from the list to configure this transaction.
                   </div>
                 ) : (
                   <>
-                    <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/40">
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                    <div className="rounded-xl border border-gray-100 dark:border-border p-4 bg-gray-50 dark:bg-muted/50/40">
+                      <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                         Product
                       </p>
-                      <p className="text-lg font-black text-gray-800 mt-1">{selectedProduct.name}</p>
+                      <p className="text-lg font-black text-gray-800 dark:text-foreground mt-1">{selectedProduct.name}</p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                        <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                           Quantity
                         </label>
                         <input
@@ -866,12 +866,12 @@ export function TransactionsScreen() {
                           step="0.01"
                           value={quantityInput}
                           onChange={(event) => setQuantityInput(event.target.value)}
-                          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                          className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                           required
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                        <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                           Unit Price (optional)
                         </label>
                         <input
@@ -881,33 +881,33 @@ export function TransactionsScreen() {
                           value={unitPriceInput}
                           onChange={(event) => setUnitPriceInput(event.target.value)}
                           placeholder="Example: 120"
-                          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                          className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                      <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                         Notes (optional)
                       </label>
                       <textarea
                         value={notesInput}
                         onChange={(event) => setNotesInput(event.target.value)}
                         rows={2}
-                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none resize-none"
+                        className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none resize-none"
                         placeholder="Order reference, table number, or cashier notes"
                       />
                     </div>
 
-                    <div className="rounded-xl border border-gray-100 overflow-hidden">
-                      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                        <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                    <div className="rounded-xl border border-gray-100 dark:border-border overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 flex items-center justify-between">
+                        <p className="text-xs font-bold text-gray-700 dark:text-foreground uppercase tracking-widest">
                           Ingredient Availability Checker
                         </p>
                         {inventoryLoading ? (
-                          <span className="text-[11px] text-gray-400">Checking inventory...</span>
+                          <span className="text-[11px] text-gray-400 dark:text-muted-foreground">Checking inventory...</span>
                         ) : (
-                          <span className="text-[11px] text-gray-400">
+                          <span className="text-[11px] text-gray-400 dark:text-muted-foreground">
                             {saleRequirements.length} ingredient(s)
                           </span>
                         )}
@@ -919,7 +919,7 @@ export function TransactionsScreen() {
                         </div>
                       ) : (
                         <table className="w-full text-left">
-                          <thead className="text-[10px] uppercase tracking-widest text-gray-400 border-b border-gray-100">
+                          <thead className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-muted-foreground border-b border-gray-100 dark:border-border">
                             <tr>
                               <th className="px-3 py-2">Ingredient</th>
                               <th className="px-3 py-2">Required</th>
@@ -931,19 +931,19 @@ export function TransactionsScreen() {
                           <tbody className="divide-y divide-gray-50">
                             {saleRequirements.map((requirement) => (
                               <tr key={`${requirement.ingredient_name}-${requirement.ingredient_unit}`}>
-                                <td className="px-3 py-3 text-sm font-semibold text-gray-800">
+                                <td className="px-3 py-3 text-sm font-semibold text-gray-800 dark:text-foreground">
                                   {requirement.ingredient_name}
-                                  <span className="ml-2 text-xs text-gray-400 uppercase">
+                                  <span className="ml-2 text-xs text-gray-400 dark:text-muted-foreground uppercase">
                                     {requirement.inventory_item_unit ?? requirement.ingredient_unit}
                                   </span>
                                 </td>
-                                <td className="px-3 py-3 text-sm text-gray-700">
+                                <td className="px-3 py-3 text-sm text-gray-700 dark:text-foreground">
                                   {formatQuantity(requirement.required_quantity)}
                                 </td>
-                                <td className="px-3 py-3 text-sm text-gray-700">
+                                <td className="px-3 py-3 text-sm text-gray-700 dark:text-foreground">
                                   {formatQuantity(requirement.available_quantity)}
                                 </td>
-                                <td className="px-3 py-3 text-sm text-gray-700">
+                                <td className="px-3 py-3 text-sm text-gray-700 dark:text-foreground">
                                   {formatQuantity(requirement.remaining_quantity)}
                                 </td>
                                 <td className="px-3 py-3 text-right">
@@ -970,9 +970,9 @@ export function TransactionsScreen() {
                       </div>
                     )}
 
-                    <div className="rounded-xl border border-gray-100 px-4 py-3 bg-gray-50/40 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-gray-700">Estimated total</span>
-                      <span className="text-lg font-black text-gray-800">
+                    <div className="rounded-xl border border-gray-100 dark:border-border px-4 py-3 bg-gray-50 dark:bg-muted/50/40 flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-700 dark:text-foreground">Estimated total</span>
+                      <span className="text-lg font-black text-gray-800 dark:text-foreground">
                         {unitPriceInput.trim()
                           ? formatCurrency(Number(unitPriceInput) * normalizedQuantity)
                           : "N/A"}
@@ -983,7 +983,7 @@ export function TransactionsScreen() {
                       <button
                         type="button"
                         onClick={closeManualCreateModal}
-                        className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold"
+                        className="px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground font-semibold"
                         disabled={isSubmitting}
                       >
                         Cancel
@@ -1012,17 +1012,17 @@ export function TransactionsScreen() {
 
       {isStockOutAiModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-6xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-white dark:bg-card rounded-2xl w-full max-w-6xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 dark:border-border flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-black text-gray-800">AI Scan Stock Out</h3>
-                <p className="text-sm text-gray-500 mt-1">
+                <h3 className="text-xl font-black text-gray-800 dark:text-foreground">AI Scan Stock Out</h3>
+                <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">
                   Human in the loop: classify product from catalog, review quantity, then confirm sale.
                 </p>
               </div>
               <button
                 onClick={closeAiStockOutModal}
-                className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700"
+                className="p-2 rounded-lg bg-gray-100 dark:bg-muted text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:text-foreground"
                 disabled={isAiScanning || isAiSubmitting}
               >
                 <XCircle size={18} />
@@ -1044,7 +1044,7 @@ export function TransactionsScreen() {
                     }}
                     onDragLeave={() => setIsAiDragging(false)}
                     className={`flex min-h-48 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-                      isAiDragging ? "border-amber-600 bg-amber-50" : "border-gray-200"
+                      isAiDragging ? "border-amber-600 bg-amber-50 dark:bg-amber-950/20" : "border-gray-200 dark:border-border"
                     }`}
                   >
                     <input
@@ -1067,14 +1067,14 @@ export function TransactionsScreen() {
                       <img
                         src={aiPreviewUrl}
                         alt="AI stock-out preview"
-                        className="max-h-56 w-full max-w-md rounded-lg border border-gray-200 object-contain"
+                        className="max-h-56 w-full max-w-md rounded-lg border border-gray-200 dark:border-border object-contain"
                       />
                     ) : (
                       <>
-                        <UploadCloud className="h-10 w-10 text-gray-400" />
+                        <UploadCloud className="h-10 w-10 text-gray-400 dark:text-muted-foreground" />
                         <div className="space-y-1">
-                          <p className="font-medium text-gray-700">Drop image here</p>
-                          <p className="text-sm text-gray-500">
+                          <p className="font-medium text-gray-700 dark:text-foreground">Drop image here</p>
+                          <p className="text-sm text-gray-500 dark:text-muted-foreground">
                             Or choose an image to classify product and estimate quantity.
                           </p>
                         </div>
@@ -1086,7 +1086,7 @@ export function TransactionsScreen() {
                     <button
                       type="button"
                       onClick={() => aiFileInputRef.current?.click()}
-                      className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white"
+                      className="px-3 py-2 rounded-xl border border-gray-200 dark:border-border text-sm font-semibold text-gray-600 dark:text-muted-foreground bg-white dark:bg-card"
                       disabled={isAiScanning || isAiSubmitting}
                     >
                       Choose Image
@@ -1108,55 +1108,55 @@ export function TransactionsScreen() {
                       )}
                     </button>
                     {aiImage ? (
-                      <span className="text-xs text-gray-500">{aiImage.name}</span>
+                      <span className="text-xs text-gray-500 dark:text-muted-foreground">{aiImage.name}</span>
                     ) : null}
                   </div>
 
                   {aiScanResult ? (
                     <>
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Detected Product
                           </p>
-                          <p className="text-sm font-semibold text-gray-800 mt-1">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
                             {aiScanResult.product_name}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Confidence
                           </p>
-                          <p className="text-sm font-semibold text-gray-800 mt-1 capitalize">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1 capitalize">
                             {aiScanResult.confidence}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Estimated Qty
                           </p>
-                          <p className="text-sm font-semibold text-gray-800 mt-1">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
                             {formatQuantity(aiScanResult.quantity_estimate)} {aiScanResult.unit}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Source
                           </p>
-                          <p className="text-sm font-semibold text-gray-800 mt-1 uppercase">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1 uppercase">
                             {aiScanResult.source}
                           </p>
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/40 space-y-3">
-                        <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                      <div className="rounded-xl border border-gray-100 dark:border-border p-4 bg-gray-50 dark:bg-muted/50/40 space-y-3">
+                        <p className="text-xs font-bold text-gray-700 dark:text-foreground uppercase tracking-widest">
                           Review Product And Quantity
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div className="md:col-span-2">
-                            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                            <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                               Product
                             </label>
                             <select
@@ -1164,7 +1164,7 @@ export function TransactionsScreen() {
                               onChange={(event) =>
                                 setAiSelectedProductId(event.target.value || null)
                               }
-                              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                              className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                             >
                               <option value="" disabled>
                                 Select product
@@ -1178,7 +1178,7 @@ export function TransactionsScreen() {
                           </div>
 
                           <div>
-                            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                            <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                               Quantity
                             </label>
                             <input
@@ -1187,13 +1187,13 @@ export function TransactionsScreen() {
                               step="0.01"
                               value={aiQuantityInput}
                               onChange={(event) => setAiQuantityInput(event.target.value)}
-                              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                              className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                             />
                           </div>
                         </div>
 
                         <div>
-                          <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                          <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                             Unit Price (optional)
                           </label>
                           <input
@@ -1203,23 +1203,23 @@ export function TransactionsScreen() {
                             value={aiUnitPriceInput}
                             onChange={(event) => setAiUnitPriceInput(event.target.value)}
                             placeholder="Example: 120"
-                            className="w-full md:w-60 px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                            className="w-full md:w-60 px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
                           />
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                          <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                      <div className="rounded-xl border border-gray-100 dark:border-border overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 flex items-center justify-between">
+                          <p className="text-xs font-bold text-gray-700 dark:text-foreground uppercase tracking-widest">
                             Recipe Availability Checker
                           </p>
-                          <span className="text-[11px] text-gray-400">
+                          <span className="text-[11px] text-gray-400 dark:text-muted-foreground">
                             {aiSaleRequirements.length} ingredient(s)
                           </span>
                         </div>
 
                         {!aiSelectedProduct ? (
-                          <div className="p-4 text-sm text-gray-500">
+                          <div className="p-4 text-sm text-gray-500 dark:text-muted-foreground">
                             Select a product to validate recipe ingredient availability.
                           </div>
                         ) : !aiHasRecipeConfigured ? (
@@ -1228,7 +1228,7 @@ export function TransactionsScreen() {
                           </div>
                         ) : (
                           <table className="w-full text-left">
-                            <thead className="text-[10px] uppercase tracking-widest text-gray-400 border-b border-gray-100">
+                            <thead className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-muted-foreground border-b border-gray-100 dark:border-border">
                               <tr>
                                 <th className="px-3 py-2">Ingredient</th>
                                 <th className="px-3 py-2">Required</th>
@@ -1242,19 +1242,19 @@ export function TransactionsScreen() {
                                 <tr
                                   key={`${requirement.ingredient_name}-${requirement.ingredient_unit}`}
                                 >
-                                  <td className="px-3 py-3 text-sm font-semibold text-gray-800">
+                                  <td className="px-3 py-3 text-sm font-semibold text-gray-800 dark:text-foreground">
                                     {requirement.ingredient_name}
-                                    <span className="ml-2 text-xs text-gray-400 uppercase">
+                                    <span className="ml-2 text-xs text-gray-400 dark:text-muted-foreground uppercase">
                                       {requirement.inventory_item_unit ?? requirement.ingredient_unit}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-3 text-sm text-gray-700">
+                                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-foreground">
                                     {formatQuantity(requirement.required_quantity)}
                                   </td>
-                                  <td className="px-3 py-3 text-sm text-gray-700">
+                                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-foreground">
                                     {formatQuantity(requirement.available_quantity)}
                                   </td>
-                                  <td className="px-3 py-3 text-sm text-gray-700">
+                                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-foreground">
                                     {formatQuantity(requirement.remaining_quantity)}
                                   </td>
                                   <td className="px-3 py-3 text-right">
@@ -1282,14 +1282,14 @@ export function TransactionsScreen() {
                       )}
 
                       <div>
-                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest block mb-1">
+                        <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
                           Notes (optional)
                         </label>
                         <textarea
                           value={aiNotesInput}
                           onChange={(event) => setAiNotesInput(event.target.value)}
                           rows={2}
-                          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none resize-none"
+                          className="w-full px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none resize-none"
                           placeholder="Order reference or operator notes"
                         />
                       </div>
@@ -1298,7 +1298,7 @@ export function TransactionsScreen() {
                         <button
                           type="button"
                           onClick={closeAiStockOutModal}
-                          className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold"
+                          className="px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground font-semibold"
                           disabled={isAiSubmitting}
                         >
                           Cancel
@@ -1340,12 +1340,12 @@ export function TransactionsScreen() {
       )}
 
       <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-4 h-[calc(100vh-84px)]">
-        <div className="w-full lg:flex-[2] bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col overflow-hidden min-h-0">
-          <div className="p-5 border-b border-gray-50 space-y-3">
+        <div className="w-full lg:flex-[2] bg-white dark:bg-card rounded-3xl border border-gray-100 dark:border-border shadow-sm flex flex-col overflow-hidden min-h-0">
+          <div className="p-5 border-b border-gray-50 dark:border-border/50 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-bold text-gray-800">Transactions Log</h2>
+              <h2 className="text-lg font-bold text-gray-800 dark:text-foreground">Transactions Log</h2>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                <span className="text-xs font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">
                   {filteredOperations.length} records
                 </span>
                 <button
@@ -1359,7 +1359,7 @@ export function TransactionsScreen() {
 
             <div className="relative">
               <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 dark:text-muted-foreground"
                 size={16}
               />
               <input
@@ -1370,12 +1370,12 @@ export function TransactionsScreen() {
                   setSearch(event.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-1 focus:ring-[#3E2723] outline-none"
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-sm focus:ring-1 focus:ring-[#3E2723] outline-none"
               />
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              <Filter size={14} className="text-gray-400" />
+              <Filter size={14} className="text-gray-400 dark:text-muted-foreground" />
 
               <select
                 value={operationFilter}
@@ -1383,7 +1383,7 @@ export function TransactionsScreen() {
                   setOperationFilter(event.target.value as OperationFilter);
                   setPage(1);
                 }}
-                className="px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs outline-none"
+                className="px-3 py-2 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-xs outline-none"
               >
                 <option value="all">All Types</option>
                 <option value="sale">Sale</option>
@@ -1394,7 +1394,7 @@ export function TransactionsScreen() {
               </select>
 
               <div className="flex items-center gap-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">
                   From
                 </label>
                 <input
@@ -1404,12 +1404,12 @@ export function TransactionsScreen() {
                     setDateFrom(event.target.value);
                     setPage(1);
                   }}
-                  className="px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs outline-none"
+                  className="px-3 py-2 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-xs outline-none"
                 />
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">
                   To
                 </label>
                 <input
@@ -1419,7 +1419,7 @@ export function TransactionsScreen() {
                     setDateTo(event.target.value);
                     setPage(1);
                   }}
-                  className="px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs outline-none"
+                  className="px-3 py-2 bg-gray-50 dark:bg-muted/50 border border-gray-100 dark:border-border rounded-xl text-xs outline-none"
                 />
               </div>
 
@@ -1441,12 +1441,12 @@ export function TransactionsScreen() {
 
           <div className="flex-1 overflow-auto">
             {loading ? (
-              <div className="p-6 text-sm text-gray-500">Loading transactions...</div>
+              <div className="p-6 text-sm text-gray-500 dark:text-muted-foreground">Loading transactions...</div>
             ) : (
               <div className="p-5">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="text-[10px] font-bold text-gray-300 uppercase tracking-widest border-b border-gray-100">
+                    <tr className="text-[10px] font-bold text-gray-300 dark:text-muted-foreground uppercase tracking-widest border-b border-gray-100 dark:border-border">
                       <th className="pb-3 px-2">Timestamp</th>
                       <th className="pb-3 px-2">Type</th>
                       <th className="pb-3 px-2">Product</th>
@@ -1459,7 +1459,7 @@ export function TransactionsScreen() {
                       <tr>
                         <td
                           colSpan={5}
-                          className="py-12 text-center text-sm text-gray-400 font-semibold"
+                          className="py-12 text-center text-sm text-gray-400 dark:text-muted-foreground font-semibold"
                         >
                           No transactions found.
                         </td>
@@ -1471,14 +1471,14 @@ export function TransactionsScreen() {
                         key={operation.id}
                         onClick={() => setSelectedId(operation.id)}
                         className={`cursor-pointer transition-all ${
-                          selectedId === operation.id ? "bg-[#FFF5F0]" : "hover:bg-gray-50"
+                          selectedId === operation.id ? "bg-[#FFF5F0] dark:bg-amber-950/30" : "hover:bg-gray-50 dark:hover:bg-muted/50"
                         }`}
                       >
                         <td className="py-3 px-2">
-                          <p className="text-sm font-bold text-gray-800">
+                          <p className="text-sm font-bold text-gray-800 dark:text-foreground">
                             {formatDate(operation.created_at)}
                           </p>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             {formatTime(operation.created_at)}
                           </p>
                         </td>
@@ -1491,13 +1491,13 @@ export function TransactionsScreen() {
                             {getOperationLabel(operation.operation_type)}
                           </span>
                         </td>
-                        <td className="py-3 px-2 text-sm font-semibold text-gray-700">
+                        <td className="py-3 px-2 text-sm font-semibold text-gray-700 dark:text-foreground">
                           {operation.product_name ?? "Unassigned"}
                         </td>
-                        <td className="py-3 px-2 text-right text-sm font-semibold text-gray-700">
+                        <td className="py-3 px-2 text-right text-sm font-semibold text-gray-700 dark:text-foreground">
                           {formatQuantity(operation.quantity)}
                         </td>
-                        <td className="py-3 px-2 text-right text-sm font-bold text-gray-700">
+                        <td className="py-3 px-2 text-right text-sm font-bold text-gray-700 dark:text-foreground">
                           {formatCurrency(operation.total_amount)}
                         </td>
                       </tr>
@@ -1506,22 +1506,22 @@ export function TransactionsScreen() {
                 </table>
 
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                    <span className="text-[11px] text-gray-400 font-bold">
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-border">
+                    <span className="text-[11px] text-gray-400 dark:text-muted-foreground font-bold">
                       Page {page} of {totalPages}
                     </span>
                     <div className="flex gap-1">
                       <button
                         disabled={page <= 1}
                         onClick={() => setPage((previousPage) => previousPage - 1)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-muted/50 text-gray-400 dark:text-muted-foreground hover:bg-gray-100 dark:bg-muted disabled:opacity-30 transition-colors"
                       >
                         <ChevronLeft size={16} />
                       </button>
                       <button
                         disabled={page >= totalPages}
                         onClick={() => setPage((previousPage) => previousPage + 1)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-muted/50 text-gray-400 dark:text-muted-foreground hover:bg-gray-100 dark:bg-muted disabled:opacity-30 transition-colors"
                       >
                         <ChevronRight size={16} />
                       </button>
@@ -1533,14 +1533,14 @@ export function TransactionsScreen() {
           </div>
         </div>
 
-        <div className="w-full lg:flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col overflow-hidden min-h-[300px] lg:min-h-0">
+        <div className="w-full lg:flex-1 bg-white dark:bg-card rounded-3xl border border-gray-100 dark:border-border shadow-sm flex flex-col overflow-hidden min-h-[300px] lg:min-h-0">
           {!selectedOperation ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
-              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-                <CalendarDays size={28} className="text-gray-300" />
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-muted flex items-center justify-center mb-4">
+                <CalendarDays size={28} className="text-gray-300 dark:text-muted-foreground" />
               </div>
-              <h3 className="text-xl font-black text-gray-800">Select a Transaction</h3>
-              <p className="text-sm text-gray-400 mt-2 max-w-xs">
+              <h3 className="text-xl font-black text-gray-800 dark:text-foreground">Select a Transaction</h3>
+              <p className="text-sm text-gray-400 dark:text-muted-foreground mt-2 max-w-xs">
                 Open any transaction to review details and impacted ingredients.
               </p>
             </div>
@@ -1560,59 +1560,59 @@ interface TransactionDetailPanelProps {
 function TransactionDetailPanel({ operation }: TransactionDetailPanelProps) {
   return (
     <>
-      <div className="p-5 sm:p-8 border-b border-gray-50 bg-gray-50/20">
+      <div className="p-5 sm:p-8 border-b border-gray-50 dark:border-border/50 bg-gray-50 dark:bg-muted/50/20">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 rounded-xl bg-[#3E2723] text-white">
             <ShoppingCart size={20} />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-gray-800 tracking-tight">
+            <h1 className="text-2xl font-black text-gray-800 dark:text-foreground tracking-tight">
               {operation.product_name ?? "Unassigned Transaction"}
             </h1>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+            <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest mt-0.5">
               {getOperationLabel(operation.operation_type)} • {operation.lines.length} ingredient line(s)
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</p>
-            <p className="text-sm font-bold text-gray-800 mt-1">{formatDate(operation.created_at)}</p>
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-border p-4">
+            <p className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">Date</p>
+            <p className="text-sm font-bold text-gray-800 dark:text-foreground mt-1">{formatDate(operation.created_at)}</p>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Time</p>
-            <p className="text-sm font-bold text-gray-800 mt-1">{formatTime(operation.created_at)}</p>
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-border p-4">
+            <p className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">Time</p>
+            <p className="text-sm font-bold text-gray-800 dark:text-foreground mt-1">{formatTime(operation.created_at)}</p>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Quantity</p>
-            <p className="text-sm font-bold text-gray-800 mt-1">{formatQuantity(operation.quantity)}</p>
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-border p-4">
+            <p className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">Quantity</p>
+            <p className="text-sm font-bold text-gray-800 dark:text-foreground mt-1">{formatQuantity(operation.quantity)}</p>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Amount</p>
-            <p className="text-sm font-bold text-gray-800 mt-1">{formatCurrency(operation.total_amount)}</p>
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-border p-4">
+            <p className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">Amount</p>
+            <p className="text-sm font-bold text-gray-800 dark:text-foreground mt-1">{formatCurrency(operation.total_amount)}</p>
           </div>
         </div>
 
         {operation.notes ? (
-          <div className="mt-4 rounded-xl border border-gray-100 bg-white px-4 py-3">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Notes</p>
-            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{operation.notes}</p>
+          <div className="mt-4 rounded-xl border border-gray-100 dark:border-border bg-white dark:bg-card px-4 py-3">
+            <p className="text-[10px] font-bold text-gray-400 dark:text-muted-foreground uppercase tracking-widest">Notes</p>
+            <p className="text-sm text-gray-700 dark:text-foreground mt-1 whitespace-pre-wrap">{operation.notes}</p>
           </div>
         ) : null}
       </div>
 
       <div className="p-5 sm:p-8 flex-1 overflow-auto">
-        <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-4">
+        <p className="text-[10px] font-bold text-gray-300 dark:text-muted-foreground uppercase tracking-widest mb-4">
           Inventory Movements
         </p>
 
         {operation.lines.length === 0 ? (
-          <p className="text-sm text-gray-500">No ingredient-level movements logged for this transaction.</p>
+          <p className="text-sm text-gray-500 dark:text-muted-foreground">No ingredient-level movements logged for this transaction.</p>
         ) : (
           <table className="w-full text-left">
             <thead>
-              <tr className="text-[10px] font-bold text-gray-300 uppercase tracking-widest border-b border-gray-100">
+              <tr className="text-[10px] font-bold text-gray-300 dark:text-muted-foreground uppercase tracking-widest border-b border-gray-100 dark:border-border">
                 <th className="pb-3 px-2">Ingredient</th>
                 <th className="pb-3 px-2">Type</th>
                 <th className="pb-3 px-2 text-right">Quantity</th>
@@ -1624,13 +1624,13 @@ function TransactionDetailPanel({ operation }: TransactionDetailPanelProps) {
 
                 return (
                   <tr key={line.id}>
-                    <td className="py-4 px-2 font-bold text-gray-700 text-sm">
+                    <td className="py-4 px-2 font-bold text-gray-700 dark:text-foreground text-sm">
                       {line.item_name}
-                      <span className="ml-2 text-[10px] uppercase tracking-widest text-gray-400">
+                      <span className="ml-2 text-[10px] uppercase tracking-widest text-gray-400 dark:text-muted-foreground">
                         {line.item_unit}
                       </span>
                     </td>
-                    <td className="py-4 px-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+                    <td className="py-4 px-2 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-muted-foreground">
                       {line.transaction_type.replace("_", " ")}
                     </td>
                     <td className="py-4 px-2 text-right">

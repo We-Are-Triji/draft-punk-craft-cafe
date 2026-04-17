@@ -81,6 +81,7 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
                 }}
                 cursor={{ fill: "rgba(0,0,0,0.03)" }}
                 formatter={(value) => [`${value ?? 0} transactions`, "Transactions"]}
+                labelStyle={{ color: "#000" }}
               />
               <Bar
                 dataKey="transactions"

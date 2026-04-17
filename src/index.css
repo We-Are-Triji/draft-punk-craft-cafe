@@ -208,3 +208,23 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+
+/* Recharts tooltip dark mode */
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: oklch(0.205 0 0) !important;
+  border-color: oklch(1 0 0 / 10%) !important;
+  color: oklch(0.985 0 0) !important;
+}
+
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-label {
+  color: oklch(0.985 0 0) !important;
+}
+
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item {
+  color: oklch(0.708 0 0) !important;
+}
+
+/* Recharts axis text dark mode */
+.dark .recharts-cartesian-axis-tick-value {
+  fill: oklch(0.708 0 0) !important;
+}

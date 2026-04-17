@@ -8,6 +8,8 @@ import {
   Receipt,
   HandPlatter,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,13 +26,12 @@ interface SidebarProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   onLogout: () => void;
-  userName?: string;
-  userEmail?: string;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }
 
-export function Sidebar({ activeTab, onTabChange, onLogout, userName, userEmail }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onLogout, theme, onToggleTheme }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const initial = (userName || userEmail || "U").charAt(0).toUpperCase();
 
   return (
     <aside
@@ -89,36 +90,56 @@ export function Sidebar({ activeTab, onTabChange, onLogout, userName, userEmail 
             {!collapsed && <span>{item.label}</span>}
           </button>
         ))}
+
+        {/* Theme toggle */}
+        <div className="mt-auto pt-2">
+          {collapsed ? (
+            <button
+              onClick={onToggleTheme}
+              className="flex items-center justify-center w-full py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          ) : (
+            <div className="bg-muted/60 rounded-lg p-1 flex">
+              <button
+                onClick={theme === "light" ? undefined : onToggleTheme}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                  theme === "light"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Sun className="w-3.5 h-3.5" />
+                Light
+              </button>
+              <button
+                onClick={theme === "dark" ? undefined : onToggleTheme}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                  theme === "dark"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Moon className="w-3.5 h-3.5" />
+                Dark
+              </button>
+            </div>
+          )}
+        </div>
       </nav>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-border space-y-3">
-        {!collapsed && (
-          <div className="flex items-center gap-3 px-2">
-            <div className="w-8 h-8 rounded-full bg-amber-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
-              {initial}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-foreground truncate">{userName || "User"}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{userEmail || ""}</p>
-            </div>
-          </div>
-        )}
-        {collapsed && (
-          <div className="flex justify-center">
-            <div className="w-8 h-8 rounded-full bg-amber-800 text-white flex items-center justify-center text-xs font-bold">
-              {initial}
-            </div>
-          </div>
-        )}
+      {/* Footer — sign out */}
+      <div className="p-2 border-t border-border">
         <button
           onClick={onLogout}
           className={cn(
-            "flex items-center gap-2.5 w-full rounded-xl text-xs font-semibold transition-all active:scale-[0.97]",
-            "border border-red-200 dark:border-red-900/40",
-            "bg-white dark:bg-red-950/10 text-red-600 dark:text-red-400",
-            "hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300 dark:hover:border-red-800",
-            collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
+            "flex items-center gap-2 w-full rounded-lg text-[11px] font-medium transition-all",
+            "text-muted-foreground hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20",
+            collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
           )}
         >
           <LogOut className="w-3.5 h-3.5 shrink-0" />

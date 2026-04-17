@@ -55,7 +55,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-amber-900/20 p-4">
+    <div className="flex items-center justify-center min-h-screen bg-amber-900/20 dark:bg-background p-4">
       <div className="flex w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl border border-amber-200 dark:border-amber-800 bg-card">
         {/* Left — Form */}
         <div className="flex flex-col justify-between w-full md:w-1/2 p-8 md:p-10">

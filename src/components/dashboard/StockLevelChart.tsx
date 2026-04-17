@@ -11,6 +11,7 @@ import {
   Cell,
 } from "recharts";
 import type { DashboardStockLevelDatum } from "@/hooks/useDashboardMetrics";
+import { useTheme } from "@/hooks/useTheme";
 
 interface StockLevelChartProps {
   data: DashboardStockLevelDatum[];
@@ -25,19 +26,21 @@ function formatStockValue(value: number): string {
   return String(Number(value.toFixed(2)));
 }
 
-function toStatusColor(status: DashboardStockLevelDatum["status"]): string {
+function toStatusColor(status: DashboardStockLevelDatum["status"], isDark: boolean): string {
   if (status === "critical") {
-    return "#ef4444";
+    return isDark ? "#f87171" : "#ef4444";
   }
 
   if (status === "low") {
-    return "#f59e0b";
+    return isDark ? "#fbbf24" : "#f59e0b";
   }
 
-  return "#16a34a";
+  return isDark ? "#4ade80" : "#16a34a";
 }
 
 export function StockLevelChart({ data, loading }: StockLevelChartProps) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const criticalCount = data.filter((stock) => stock.status === "critical").length;
   const lowCount = data.filter((stock) => stock.status === "low").length;
   const healthyCount = data.filter((stock) => stock.status === "healthy").length;
@@ -55,10 +58,10 @@ export function StockLevelChart({ data, loading }: StockLevelChartProps) {
           <Badge variant="destructive" className="text-[10px] h-5">
             {criticalCount} critical
           </Badge>
-          <Badge variant="outline" className="text-[10px] h-5 border-amber-200 text-amber-700">
+          <Badge variant="outline" className="text-[10px] h-5 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400">
             {lowCount} low
           </Badge>
-          <Badge variant="outline" className="text-[10px] h-5 border-emerald-200 text-emerald-700">
+          <Badge variant="outline" className="text-[10px] h-5 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400">
             {healthyCount} healthy
           </Badge>
         </div>
@@ -102,19 +105,20 @@ export function StockLevelChart({ data, loading }: StockLevelChartProps) {
               <Tooltip
                 contentStyle={{
                   borderRadius: "10px",
-                  border: "1px solid #e5e7eb",
-                  backgroundColor: "#fff",
+                  border: isDark ? "1px solid oklch(1 0 0 / 10%)" : "1px solid #e5e7eb",
+                  backgroundColor: isDark ? "oklch(0.205 0 0)" : "#fff",
                   fontSize: "12px",
                   boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
                   padding: "10px 14px",
                   lineHeight: "1.6",
+                  color: isDark ? "oklch(0.985 0 0)" : "#000",
                 }}
                 formatter={(value, name, payload) => {
                   const itemUnit = payload?.payload?.unit ?? "";
                   return [`${formatStockValue(Number(value ?? 0))} ${itemUnit}`, name];
                 }}
                 itemStyle={{ padding: 0 }}
-                labelStyle={{ fontWeight: 600, marginBottom: 4 }}
+                labelStyle={{ fontWeight: 600, marginBottom: 4, color: isDark ? "oklch(0.985 0 0)" : "#000" }}
               />
               <Bar
                 dataKey="current_stock"
@@ -125,7 +129,7 @@ export function StockLevelChart({ data, loading }: StockLevelChartProps) {
                 {data.map((item) => (
                   <Cell
                     key={`${item.name}-${item.unit}-current`}
-                    fill={toStatusColor(item.status)}
+                    fill={toStatusColor(item.status, isDark)}
                   />
                 ))}
               </Bar>

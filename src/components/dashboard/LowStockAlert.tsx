@@ -67,7 +67,7 @@ export function LowStockAlert() {
             </div>
           );
         })}
-        <button className="flex items-center justify-center gap-1 text-xs text-amber-800 hover:text-amber-900 font-medium mt-1 transition-colors">
+        <button className="flex items-center justify-center gap-1 text-xs text-amber-800 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300 font-medium mt-1 transition-colors">
           View all inventory
           <ArrowRight className="w-3 h-3" />
         </button>
