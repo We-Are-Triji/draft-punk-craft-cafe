@@ -72,6 +72,13 @@ interface ConfirmScanDeductionInput {
   notes?: string;
 }
 
+export interface ManualStockInEntry {
+  item_name: string;
+  category?: string;
+  unit: string;
+  quantity: number;
+}
+
 interface InventoryLookup {
   id: string;
   current_stock: number;
@@ -336,6 +343,24 @@ async function getOrCreateInventoryItem(
   ingredient: IngredientDeduction
 ): Promise<InventoryLookup> {
   const supabase = getSupabaseClient();
+  const { data: exactItems, error: exactSelectError } = await supabase
+    .from("inventory_items")
+    .select("id, current_stock")
+    .ilike("name", ingredient.item_name)
+    .ilike("unit", ingredient.unit)
+    .limit(1);
+
+  if (exactSelectError) {
+    throw new Error(`Inventory lookup failed: ${exactSelectError.message}`);
+  }
+
+  if (exactItems && exactItems.length > 0) {
+    return {
+      id: exactItems[0].id,
+      current_stock: toNumber(exactItems[0].current_stock, 0),
+    };
+  }
+
   const { data: existingItems, error: selectError } = await supabase
     .from("inventory_items")
     .select("id, current_stock")
@@ -398,6 +423,154 @@ function buildScanTransactionNotes(
   }
 
   return `${notes}\n${marker}`;
+}
+
+function buildManualStockInNotes(notes: string | undefined): string {
+  const trimmedNotes = notes?.trim();
+
+  if (!trimmedNotes) {
+    return "Manual stock-in confirmation";
+  }
+
+  return trimmedNotes;
+}
+
+export async function recordManualStockIn({
+  entries,
+  notes,
+}: {
+  entries: ManualStockInEntry[];
+  notes?: string;
+}): Promise<ConfirmDeductionResult> {
+  const normalizedEntries = entries
+    .map((entry) => ({
+      item_name: entry.item_name.trim(),
+      category: entry.category?.trim() || "Recipe",
+      unit: entry.unit.trim(),
+      quantity: toNumber(entry.quantity, 0),
+    }))
+    .filter(
+      (entry) =>
+        entry.item_name.length > 0 && entry.unit.length > 0 && entry.quantity > 0
+    );
+
+  if (normalizedEntries.length === 0) {
+    throw new Error("At least one stock-in entry is required.");
+  }
+
+  const supabase = getSupabaseClient();
+  const transactionIds: string[] = [];
+  const operationNotes = buildManualStockInNotes(notes);
+  let operationId: string | null = null;
+
+  const totalQuantity = normalizedEntries.reduce(
+    (sum, entry) => sum + entry.quantity,
+    0
+  );
+
+  const { data: createdOperation, error: operationError } = await supabase
+    .from("transaction_operations")
+    .insert({
+      operation_type: "manual_stock_in",
+      quantity: Number(totalQuantity.toFixed(3)),
+      notes: operationNotes,
+      metadata: {
+        source: "inventory_manual",
+        entry_count: normalizedEntries.length,
+      },
+    })
+    .select("id")
+    .single();
+
+  if (operationError) {
+    if (!isMissingRelationError(operationError, "transaction_operations")) {
+      throw new Error(`Operation logging failed: ${operationError.message}`);
+    }
+  } else {
+    operationId = String(createdOperation.id);
+  }
+
+  try {
+    for (const entry of normalizedEntries) {
+      const inventoryItem = await getOrCreateInventoryItem({
+        item_name: entry.item_name,
+        category: entry.category,
+        quantity: entry.quantity,
+        unit: entry.unit,
+      });
+
+      const nextStockLevel = inventoryItem.current_stock + entry.quantity;
+
+      const { error: updateError } = await supabase
+        .from("inventory_items")
+        .update({ current_stock: nextStockLevel })
+        .eq("id", inventoryItem.id);
+
+      if (updateError) {
+        throw new Error(`Inventory update failed: ${updateError.message}`);
+      }
+
+      const transactionPayload: Record<string, unknown> = {
+        item_id: inventoryItem.id,
+        transaction_type: "stock_in",
+        quantity: entry.quantity,
+        image_url: null,
+        detected_by_ai: false,
+        notes: operationNotes,
+      };
+
+      if (operationId) {
+        transactionPayload.operation_id = operationId;
+      }
+
+      const { data: createdTransaction, error: transactionError } = await supabase
+        .from("stock_transactions")
+        .insert(transactionPayload)
+        .select("id")
+        .single();
+
+      if (transactionError) {
+        if (operationId && isMissingColumnError(transactionError, "operation_id")) {
+          const fallbackPayload: Record<string, unknown> = {
+            item_id: inventoryItem.id,
+            transaction_type: "stock_in",
+            quantity: entry.quantity,
+            image_url: null,
+            detected_by_ai: false,
+            notes: operationNotes,
+          };
+
+          const { data: fallbackTransaction, error: fallbackError } = await supabase
+            .from("stock_transactions")
+            .insert(fallbackPayload)
+            .select("id")
+            .single();
+
+          if (fallbackError) {
+            throw new Error(`Transaction logging failed: ${fallbackError.message}`);
+          }
+
+          transactionIds.push(String(fallbackTransaction.id));
+          continue;
+        }
+
+        throw new Error(`Transaction logging failed: ${transactionError.message}`);
+      }
+
+      transactionIds.push(String(createdTransaction.id));
+    }
+  } catch (entryError) {
+    if (operationId) {
+      await supabase.from("transaction_operations").delete().eq("id", operationId);
+    }
+
+    throw entryError;
+  }
+
+  return {
+    deductionsApplied: transactionIds.length,
+    transactionIds,
+  };
 }
 
 export async function scanImageForDeduction(file: File): Promise<ScanDetectionResult> {

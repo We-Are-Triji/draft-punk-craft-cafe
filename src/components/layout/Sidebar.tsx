@@ -5,17 +5,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Coffee,
-  CameraIcon,
   Receipt,
   HandPlatter,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type Tab = "scan" | "dashboard" | "inventory" | "transactions" | "recipes";
+export type Tab = "dashboard" | "inventory" | "transactions" | "recipes";
 
 const navItems = [
-  { icon: CameraIcon, label: "Scan", tab: "scan" as const },
   { icon: LayoutDashboard, label: "Dashboard", tab: "dashboard" as const },
   { icon: Package, label: "Inventory", tab: "inventory" as const },
   { icon: Receipt, label: "Transactions", tab: "transactions" as const },

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Sidebar, type Tab } from "@/components/layout/Sidebar";
-import { ScanScreen } from "@/components/ScanScreen";
 import { DashboardScreen } from "@/components/DashboardScreen";
 import { LoginScreen } from "@/components/LoginScreen";
 import { InventoryScreen } from "@/components/InventoryScreen";
@@ -11,7 +10,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authReady, setAuthReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("scan");
+  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -58,7 +57,6 @@ function App() {
     <div className="flex min-h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="flex-1 p-6 overflow-auto">
-        {activeTab === "scan" && <ScanScreen />}
         {activeTab === "dashboard" && <DashboardScreen />}
         {activeTab === "inventory" && <InventoryScreen />}
         {activeTab === "transactions" && <TransactionsScreen />}
