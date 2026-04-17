@@ -23,10 +23,14 @@ const navItems = [
 interface SidebarProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
+  onLogout: () => void;
+  userName?: string;
+  userEmail?: string;
 }
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onLogout, userName, userEmail }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const initial = (userName || userEmail || "U").charAt(0).toUpperCase();
 
   return (
     <aside
@@ -88,12 +92,37 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-2 border-t border-border">
+      <div className="p-3 border-t border-border space-y-3">
+        {!collapsed && (
+          <div className="flex items-center gap-3 px-2">
+            <div className="w-8 h-8 rounded-full bg-amber-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
+              {initial}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground truncate">{userName || "User"}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{userEmail || ""}</p>
+            </div>
+          </div>
+        )}
+        {collapsed && (
+          <div className="flex justify-center">
+            <div className="w-8 h-8 rounded-full bg-amber-800 text-white flex items-center justify-center text-xs font-bold">
+              {initial}
+            </div>
+          </div>
+        )}
         <button
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-all w-full"
+          onClick={onLogout}
+          className={cn(
+            "flex items-center gap-2.5 w-full rounded-xl text-xs font-semibold transition-all active:scale-[0.97]",
+            "border border-red-200 dark:border-red-900/40",
+            "bg-white dark:bg-red-950/10 text-red-600 dark:text-red-400",
+            "hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300 dark:hover:border-red-800",
+            collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
+          )}
         >
-          <LogOut className="w-4 h-4 shrink-0" />
-          {!collapsed && <span>Logout</span>}
+          <LogOut className="w-3.5 h-3.5 shrink-0" />
+          {!collapsed && <span>Sign out</span>}
         </button>
       </div>
     </aside>
