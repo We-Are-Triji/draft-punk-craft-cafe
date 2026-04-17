@@ -9,6 +9,7 @@ import {
   Cell,
 } from "recharts";
 import type { DashboardTopTransactionDatum } from "@/hooks/useDashboardMetrics";
+import { useTheme } from "@/hooks/useTheme";
 
 interface TopDishesChartProps {
   data: DashboardTopTransactionDatum[];
@@ -25,6 +26,9 @@ const barColors = [
 ];
 
 export function TopDishesChart({ data, loading }: TopDishesChartProps) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
   const chartDomainMax = Math.max(
     5,
     ...data.map((item) => Math.ceil(item.transactions * 1.25))
@@ -73,15 +77,16 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
               <Tooltip
                 contentStyle={{
                   borderRadius: "10px",
-                  border: "1px solid #e5e7eb",
-                  backgroundColor: "#fff",
+                  border: isDark ? "1px solid oklch(1 0 0 / 10%)" : "1px solid #e5e7eb",
+                  backgroundColor: isDark ? "oklch(0.205 0 0)" : "#fff",
                   fontSize: "12px",
                   boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
                   padding: "8px 12px",
+                  color: isDark ? "oklch(0.985 0 0)" : "#000",
                 }}
-                cursor={{ fill: "rgba(0,0,0,0.03)" }}
+                cursor={{ fill: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)" }}
                 formatter={(value) => [`${value ?? 0} transactions`, "Transactions"]}
-                labelStyle={{ color: "#000" }}
+                labelStyle={{ color: isDark ? "oklch(0.985 0 0)" : "#000" }}
               />
               <Bar
                 dataKey="transactions"
@@ -91,7 +96,7 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
                   position: "right",
                   fontSize: 12,
                   fontWeight: 600,
-                  fill: "#78716c",
+                  fill: isDark ? "#a8a29e" : "#78716c",
                 }}
               >
                 {data.map((_, i) => (

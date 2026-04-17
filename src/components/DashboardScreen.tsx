@@ -20,7 +20,7 @@ export function DashboardScreen({ onNavigate }: DashboardScreenProps) {
       <QuickShortcuts onNavigate={onNavigate} />
 
       {error ? (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">
           {error}
         </div>
       ) : null}

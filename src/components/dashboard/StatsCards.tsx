@@ -13,6 +13,7 @@ interface StatItem {
   icon: LucideIcon;
   iconBg: string;
   iconColor: string;
+  accentRing: string;
 }
 
 interface StatsCardsProps {
@@ -61,7 +62,7 @@ export function StatsCards({
   const stats: StatItem[] = [
     {
       title: "Low Stock Items",
-      value: loading ? "--" : String(lowStockCount),
+      value: loading ? "—" : String(lowStockCount),
       subtitle: loading
         ? "Loading stock status..."
         : criticalStockCount > 0
@@ -70,21 +71,23 @@ export function StatsCards({
       icon: AlertTriangle,
       iconBg: "bg-red-50 dark:bg-red-950/40",
       iconColor: "text-red-500",
+      accentRing: "ring-red-100 dark:ring-red-900/30",
     },
     {
       title: "Transactions Today",
-      value: loading ? "--" : String(transactionsToday),
+      value: loading ? "—" : String(transactionsToday),
       subtitle: loading
         ? "Loading transaction history..."
         : `${saleTransactionsToday} sale(s), ${scanTransactionsToday} scan(s)`,
       icon: CameraIcon,
       iconBg: "bg-blue-50 dark:bg-blue-950/40",
       iconColor: "text-blue-500",
+      accentRing: "ring-blue-100 dark:ring-blue-900/30",
     },
     {
       title: "Top Product",
       value: loading
-        ? "--"
+        ? "—"
         : topProductName && topProductName.length > 0
           ? topProductName
           : "No transactions yet",
@@ -95,17 +98,18 @@ export function StatsCards({
           : toTransactionDeltaText(transactionsToday, transactionsYesterday),
       icon: UtensilsCrossed,
       iconBg: "bg-amber-50 dark:bg-amber-950/40",
-      iconColor: "text-amber-700",
+      iconColor: "text-amber-600 dark:text-amber-500",
+      accentRing: "ring-amber-100 dark:ring-amber-900/30",
     },
   ];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {stats.map((stat) => (
-        <Card key={stat.title} className="hover:shadow-md transition-shadow">
+        <Card key={stat.title} className="hover:shadow-md transition-shadow duration-200 group">
           <CardContent className="flex items-center gap-4 p-5">
             <div
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${stat.iconBg}`}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ring-1 ${stat.iconBg} ${stat.accentRing}`}
             >
               <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
             </div>
@@ -113,10 +117,10 @@ export function StatsCards({
               <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                 {stat.title}
               </p>
-              <p className="text-2xl font-bold text-foreground leading-tight mt-0.5">
+              <p className="text-2xl font-bold text-foreground leading-tight mt-0.5 truncate">
                 {stat.value}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                 {stat.subtitle}
               </p>
             </div>

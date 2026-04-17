@@ -56,7 +56,7 @@ export function NotificationsPanel() {
       <CardHeader className="flex flex-row items-center justify-between pb-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
-            <Bell className="w-4 h-4 text-amber-700" />
+            <Bell className="w-4 h-4 text-amber-700 dark:text-amber-400" />
           </div>
           <CardTitle className="text-sm font-semibold">Activity</CardTitle>
         </div>
