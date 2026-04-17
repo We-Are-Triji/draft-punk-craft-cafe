@@ -22,14 +22,16 @@ export function DashboardScreen() {
         loading={loading}
         lowStockCount={metrics.low_stock_count}
         criticalStockCount={metrics.critical_stock_count}
-        scansToday={metrics.scans_today}
-        scansYesterday={metrics.scans_yesterday}
-        mostScannedItemName={metrics.most_scanned_item_name}
-        mostScannedItemCount={metrics.most_scanned_item_count}
+        transactionsToday={metrics.transactions_today}
+        transactionsYesterday={metrics.transactions_yesterday}
+        scanTransactionsToday={metrics.scan_transactions_today}
+        saleTransactionsToday={metrics.sale_transactions_today}
+        topProductName={metrics.top_transaction_product_name}
+        topProductCount={metrics.top_transaction_product_count}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TopDishesChart data={metrics.top_scanned_items} loading={loading} />
+        <TopDishesChart data={metrics.top_transaction_products} loading={loading} />
         <StockLevelChart data={metrics.stock_levels} loading={loading} />
       </div>
 
@@ -38,9 +40,9 @@ export function DashboardScreen() {
         <QuickInsights
           loading={loading}
           lowestStockItem={metrics.lowest_stock_item}
-          trendingItem={metrics.trending_item}
-          peakScanHour={metrics.peak_scan_hour}
-          latestScan={metrics.latest_scan}
+          trendingProduct={metrics.trending_product}
+          peakTransactionHour={metrics.peak_transaction_hour}
+          latestTransaction={metrics.latest_transaction}
         />
       </div>
     </div>

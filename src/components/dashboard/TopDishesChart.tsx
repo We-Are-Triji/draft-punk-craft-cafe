@@ -8,10 +8,10 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import type { DashboardTopScannedDatum } from "@/hooks/useDashboardMetrics";
+import type { DashboardTopTransactionDatum } from "@/hooks/useDashboardMetrics";
 
 interface TopDishesChartProps {
-  data: DashboardTopScannedDatum[];
+  data: DashboardTopTransactionDatum[];
   loading: boolean;
 }
 
@@ -27,15 +27,15 @@ const barColors = [
 export function TopDishesChart({ data, loading }: TopDishesChartProps) {
   const chartDomainMax = Math.max(
     5,
-    ...data.map((item) => Math.ceil(item.scans * 1.25))
+    ...data.map((item) => Math.ceil(item.transactions * 1.25))
   );
 
   return (
     <Card className="h-full flex flex-col">
       <CardHeader>
-        <CardTitle className="text-base font-semibold">Top Dishes</CardTitle>
+        <CardTitle className="text-base font-semibold">Top Products</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Most scanned recipes this week
+          Most transacted products this week
         </p>
       </CardHeader>
       <CardContent className="flex-1 pt-0">
@@ -80,10 +80,10 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
                   padding: "8px 12px",
                 }}
                 cursor={{ fill: "rgba(0,0,0,0.03)" }}
-                formatter={(value) => [`${value ?? 0} scans`, "Scans"]}
+                formatter={(value) => [`${value ?? 0} transactions`, "Transactions"]}
               />
               <Bar
-                dataKey="scans"
+                dataKey="transactions"
                 radius={[0, 8, 8, 0]}
                 barSize={20}
                 label={{

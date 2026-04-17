@@ -19,23 +19,28 @@ interface StatsCardsProps {
   loading: boolean;
   lowStockCount: number;
   criticalStockCount: number;
-  scansToday: number;
-  scansYesterday: number;
-  mostScannedItemName: string | null;
-  mostScannedItemCount: number;
+  transactionsToday: number;
+  transactionsYesterday: number;
+  scanTransactionsToday: number;
+  saleTransactionsToday: number;
+  topProductName: string | null;
+  topProductCount: number;
 }
 
-function toScanDeltaText(scansToday: number, scansYesterday: number): string {
-  if (scansToday === 0 && scansYesterday === 0) {
-    return "No scans yet today";
+function toTransactionDeltaText(
+  transactionsToday: number,
+  transactionsYesterday: number
+): string {
+  if (transactionsToday === 0 && transactionsYesterday === 0) {
+    return "No transactions yet today";
   }
 
-  if (scansYesterday === 0) {
-    return "First scan activity recorded today";
+  if (transactionsYesterday === 0) {
+    return "First recorded transactions today";
   }
 
   const percentDelta = Math.round(
-    ((scansToday - scansYesterday) / scansYesterday) * 100
+    ((transactionsToday - transactionsYesterday) / transactionsYesterday) * 100
   );
   const prefix = percentDelta > 0 ? "+" : "";
 
@@ -46,10 +51,12 @@ export function StatsCards({
   loading,
   lowStockCount,
   criticalStockCount,
-  scansToday,
-  scansYesterday,
-  mostScannedItemName,
-  mostScannedItemCount,
+  transactionsToday,
+  transactionsYesterday,
+  scanTransactionsToday,
+  saleTransactionsToday,
+  topProductName,
+  topProductCount,
 }: StatsCardsProps) {
   const stats: StatItem[] = [
     {
@@ -65,27 +72,27 @@ export function StatsCards({
       iconColor: "text-red-500",
     },
     {
-      title: "Scans Today",
-      value: loading ? "--" : String(scansToday),
+      title: "Transactions Today",
+      value: loading ? "--" : String(transactionsToday),
       subtitle: loading
-        ? "Loading scan history..."
-        : toScanDeltaText(scansToday, scansYesterday),
+        ? "Loading transaction history..."
+        : `${saleTransactionsToday} sale(s), ${scanTransactionsToday} scan(s)`,
       icon: CameraIcon,
       iconBg: "bg-blue-50 dark:bg-blue-950/40",
       iconColor: "text-blue-500",
     },
     {
-      title: "Most Scanned Item",
+      title: "Top Product",
       value: loading
         ? "--"
-        : mostScannedItemName && mostScannedItemName.length > 0
-          ? mostScannedItemName
-          : "No scans yet",
+        : topProductName && topProductName.length > 0
+          ? topProductName
+          : "No transactions yet",
       subtitle: loading
         ? "Loading trend data..."
-        : mostScannedItemCount > 0
-          ? `${mostScannedItemCount} scans in the last 7 days`
-          : "Waiting for scanned history",
+        : topProductCount > 0
+          ? `${topProductCount} transactions in the last 7 days`
+          : toTransactionDeltaText(transactionsToday, transactionsYesterday),
       icon: UtensilsCrossed,
       iconBg: "bg-amber-50 dark:bg-amber-950/40",
       iconColor: "text-amber-700",

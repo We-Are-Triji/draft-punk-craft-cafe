@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useInventory } from "@/hooks/useInventory";
-import { useScanHistory, type ScanHistoryEvent } from "@/hooks/useScanHistory";
+import { useTransactionOperations } from "@/hooks/useTransactionOperations";
 import type { InventoryItemRow } from "@/types/inventory";
+import type { TransactionOperationWithLines } from "@/types/inventory";
 
 type StockStatusLevel = "healthy" | "low" | "critical";
 
@@ -13,9 +14,10 @@ export interface DashboardStockLevelDatum {
   status: StockStatusLevel;
 }
 
-export interface DashboardTopScannedDatum {
+export interface DashboardTopTransactionDatum {
   name: string;
-  scans: number;
+  transactions: number;
+  quantity: number;
 }
 
 export interface DashboardPeakHour {
@@ -27,16 +29,18 @@ export interface DashboardPeakHour {
 export interface DashboardMetrics {
   low_stock_count: number;
   critical_stock_count: number;
-  scans_today: number;
-  scans_yesterday: number;
-  most_scanned_item_name: string | null;
-  most_scanned_item_count: number;
-  top_scanned_items: DashboardTopScannedDatum[];
+  transactions_today: number;
+  transactions_yesterday: number;
+  scan_transactions_today: number;
+  sale_transactions_today: number;
+  top_transaction_product_name: string | null;
+  top_transaction_product_count: number;
+  top_transaction_products: DashboardTopTransactionDatum[];
   stock_levels: DashboardStockLevelDatum[];
   lowest_stock_item: DashboardStockLevelDatum | null;
-  trending_item: DashboardTopScannedDatum | null;
-  peak_scan_hour: DashboardPeakHour | null;
-  latest_scan: ScanHistoryEvent | null;
+  trending_product: DashboardTopTransactionDatum | null;
+  peak_transaction_hour: DashboardPeakHour | null;
+  latest_transaction: TransactionOperationWithLines | null;
 }
 
 interface UseDashboardMetricsResult {
@@ -67,44 +71,65 @@ function classifyStockStatus(item: InventoryItemRow): StockStatusLevel {
   return "healthy";
 }
 
-function countScansByItemName(events: ScanHistoryEvent[]): DashboardTopScannedDatum[] {
-  const scanCountMap = new Map<string, number>();
+function countOperationsByProduct(
+  operations: TransactionOperationWithLines[]
+): DashboardTopTransactionDatum[] {
+  const transactionCountMap = new Map<string, { transactions: number; quantity: number }>();
 
-  for (const event of events) {
-    const normalizedName = event.item_name.trim() || "Unknown Item";
+  for (const operation of operations) {
+    const normalizedName = operation.product_name?.trim() || "";
 
-    scanCountMap.set(
-      normalizedName,
-      (scanCountMap.get(normalizedName) ?? 0) + 1
-    );
+    if (!normalizedName) {
+      continue;
+    }
+
+    const current = transactionCountMap.get(normalizedName) ?? {
+      transactions: 0,
+      quantity: 0,
+    };
+
+    transactionCountMap.set(normalizedName, {
+      transactions: current.transactions + 1,
+      quantity: Number((current.quantity + operation.quantity).toFixed(3)),
+    });
   }
 
-  return [...scanCountMap.entries()]
-    .map(([name, scans]) => ({ name, scans }))
+  return [...transactionCountMap.entries()]
+    .map(([name, values]) => ({
+      name,
+      transactions: values.transactions,
+      quantity: values.quantity,
+    }))
     .sort((left, right) => {
-      if (right.scans !== left.scans) {
-        return right.scans - left.scans;
+      if (right.transactions !== left.transactions) {
+        return right.transactions - left.transactions;
+      }
+
+      if (right.quantity !== left.quantity) {
+        return right.quantity - left.quantity;
       }
 
       return left.name.localeCompare(right.name);
     });
 }
 
-function getPeakScanHour(eventsToday: ScanHistoryEvent[]): DashboardPeakHour | null {
-  if (eventsToday.length === 0) {
+function getPeakOperationHour(
+  operationsToday: TransactionOperationWithLines[]
+): DashboardPeakHour | null {
+  if (operationsToday.length === 0) {
     return null;
   }
 
   const hourCounts = new Array<number>(24).fill(0);
 
-  for (const event of eventsToday) {
-    const scanDate = new Date(event.created_at);
+  for (const operation of operationsToday) {
+    const operationDate = new Date(operation.created_at);
 
-    if (Number.isNaN(scanDate.getTime())) {
+    if (Number.isNaN(operationDate.getTime())) {
       continue;
     }
 
-    hourCounts[scanDate.getHours()] += 1;
+    hourCounts[operationDate.getHours()] += 1;
   }
 
   let bestHour = 0;
@@ -127,7 +152,7 @@ function getPeakScanHour(eventsToday: ScanHistoryEvent[]): DashboardPeakHour | n
   return {
     label: rangeLabel,
     count: bestCount,
-    share_percent: Math.round((bestCount / eventsToday.length) * 100),
+    share_percent: Math.round((bestCount / operationsToday.length) * 100),
   };
 }
 
@@ -135,16 +160,18 @@ function toFallbackMetrics(): DashboardMetrics {
   return {
     low_stock_count: 0,
     critical_stock_count: 0,
-    scans_today: 0,
-    scans_yesterday: 0,
-    most_scanned_item_name: null,
-    most_scanned_item_count: 0,
-    top_scanned_items: [],
+    transactions_today: 0,
+    transactions_yesterday: 0,
+    scan_transactions_today: 0,
+    sale_transactions_today: 0,
+    top_transaction_product_name: null,
+    top_transaction_product_count: 0,
+    top_transaction_products: [],
     stock_levels: [],
     lowest_stock_item: null,
-    trending_item: null,
-    peak_scan_hour: null,
-    latest_scan: null,
+    trending_product: null,
+    peak_transaction_hour: null,
+    latest_transaction: null,
   };
 }
 
@@ -155,13 +182,13 @@ export function useDashboardMetrics(): UseDashboardMetricsResult {
     error: inventoryError,
   } = useInventory();
   const {
-    events,
-    loading: scanHistoryLoading,
-    error: scanHistoryError,
-  } = useScanHistory();
+    operations,
+    loading: operationsLoading,
+    error: operationsError,
+  } = useTransactionOperations();
 
   const metrics = useMemo<DashboardMetrics>(() => {
-    if (items.length === 0 && events.length === 0) {
+    if (items.length === 0 && operations.length === 0) {
       return toFallbackMetrics();
     }
 
@@ -176,22 +203,31 @@ export function useDashboardMetrics(): UseDashboardMetricsResult {
     const trendingWindowStart = new Date(todayStart);
     trendingWindowStart.setDate(trendingWindowStart.getDate() - 2);
 
-    const scansToday = events.filter((event) => new Date(event.created_at) >= todayStart);
-    const scansYesterday = events.filter((event) => {
-      const createdAt = new Date(event.created_at);
+    const transactionsToday = operations.filter(
+      (operation) => new Date(operation.created_at) >= todayStart
+    );
+    const transactionsYesterday = operations.filter((operation) => {
+      const createdAt = new Date(operation.created_at);
       return createdAt >= yesterdayStart && createdAt < todayStart;
     });
 
-    const scansThisWeek = events.filter(
-      (event) => new Date(event.created_at) >= weekStart
+    const transactionsThisWeek = operations.filter(
+      (operation) => new Date(operation.created_at) >= weekStart
     );
-    const topScannedWeek = countScansByItemName(scansThisWeek).slice(0, 6);
-    const mostScannedWeek = topScannedWeek[0] ?? null;
+    const topTransactionsWeek = countOperationsByProduct(transactionsThisWeek).slice(0, 6);
+    const topProductWeek = topTransactionsWeek[0] ?? null;
 
-    const trendingScans = events.filter(
-      (event) => new Date(event.created_at) >= trendingWindowStart
+    const trendingTransactions = operations.filter(
+      (operation) => new Date(operation.created_at) >= trendingWindowStart
     );
-    const trendingItem = countScansByItemName(trendingScans)[0] ?? null;
+    const trendingProduct = countOperationsByProduct(trendingTransactions)[0] ?? null;
+
+    const scanTransactionsTodayCount = transactionsToday.filter(
+      (operation) => operation.operation_type === "scan"
+    ).length;
+    const saleTransactionsTodayCount = transactionsToday.filter(
+      (operation) => operation.operation_type === "sale"
+    ).length;
 
     const stockLevels = items
       .map((item) => {
@@ -231,11 +267,13 @@ export function useDashboardMetrics(): UseDashboardMetricsResult {
     return {
       low_stock_count: lowStockCount,
       critical_stock_count: criticalStockCount,
-      scans_today: scansToday.length,
-      scans_yesterday: scansYesterday.length,
-      most_scanned_item_name: mostScannedWeek?.name ?? null,
-      most_scanned_item_count: mostScannedWeek?.scans ?? 0,
-      top_scanned_items: topScannedWeek,
+      transactions_today: transactionsToday.length,
+      transactions_yesterday: transactionsYesterday.length,
+      scan_transactions_today: scanTransactionsTodayCount,
+      sale_transactions_today: saleTransactionsTodayCount,
+      top_transaction_product_name: topProductWeek?.name ?? null,
+      top_transaction_product_count: topProductWeek?.transactions ?? 0,
+      top_transaction_products: topTransactionsWeek,
       stock_levels: stockLevels.slice(0, 8),
       lowest_stock_item:
         stockLevels.length > 0
@@ -247,15 +285,15 @@ export function useDashboardMetrics(): UseDashboardMetricsResult {
               status: stockLevels[0].status,
             }
           : null,
-      trending_item: trendingItem,
-      peak_scan_hour: getPeakScanHour(scansToday),
-      latest_scan: events[0] ?? null,
+      trending_product: trendingProduct,
+      peak_transaction_hour: getPeakOperationHour(transactionsToday),
+      latest_transaction: operations[0] ?? null,
     };
-  }, [events, items]);
+  }, [items, operations]);
 
   return {
     metrics,
-    loading: inventoryLoading || scanHistoryLoading,
-    error: inventoryError ?? scanHistoryError,
+    loading: inventoryLoading || operationsLoading,
+    error: inventoryError ?? operationsError,
   };
 }

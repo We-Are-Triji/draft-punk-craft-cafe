@@ -3,16 +3,16 @@ import { TrendingDown, Clock, Flame } from "lucide-react";
 import type {
   DashboardPeakHour,
   DashboardStockLevelDatum,
-  DashboardTopScannedDatum,
+  DashboardTopTransactionDatum,
 } from "@/hooks/useDashboardMetrics";
-import type { ScanHistoryEvent } from "@/hooks/useScanHistory";
+import type { TransactionOperationWithLines } from "@/types/inventory";
 
 interface QuickInsightsProps {
   loading: boolean;
   lowestStockItem: DashboardStockLevelDatum | null;
-  trendingItem: DashboardTopScannedDatum | null;
-  peakScanHour: DashboardPeakHour | null;
-  latestScan: ScanHistoryEvent | null;
+  trendingProduct: DashboardTopTransactionDatum | null;
+  peakTransactionHour: DashboardPeakHour | null;
+  latestTransaction: TransactionOperationWithLines | null;
 }
 
 interface InsightItem {
@@ -31,7 +31,7 @@ function formatQuantity(value: number): string {
   return String(Number(value.toFixed(2)));
 }
 
-function formatScanDateTime(value: string): string {
+function formatDateTime(value: string): string {
   const parsedDate = new Date(value);
 
   if (Number.isNaN(parsedDate.getTime())) {
@@ -49,9 +49,9 @@ function formatScanDateTime(value: string): string {
 export function QuickInsights({
   loading,
   lowestStockItem,
-  trendingItem,
-  peakScanHour,
-  latestScan,
+  trendingProduct,
+  peakTransactionHour,
+  latestTransaction,
 }: QuickInsightsProps) {
   const insights: InsightItem[] = [
     {
@@ -74,34 +74,34 @@ export function QuickInsights({
       iconBg: "bg-amber-50 dark:bg-amber-950/40",
       iconColor: "text-amber-600",
       text: loading
-        ? "Analyzing scan trends"
-        : trendingItem
-          ? `${trendingItem.name} is trending`
+        ? "Analyzing transaction trends"
+        : trendingProduct
+          ? `${trendingProduct.name} is trending`
           : "No trend available yet",
       detail: loading
-        ? "Loading scan activity..."
-        : trendingItem
-          ? `${trendingItem.scans} scan(s) over the last 3 days`
-          : "Scan an item to start seeing trend insights.",
+        ? "Loading transaction activity..."
+        : trendingProduct
+          ? `${trendingProduct.transactions} transaction(s) over the last 3 days`
+          : "Record transactions to unlock trend insights.",
     },
     {
       icon: Clock,
       iconBg: "bg-blue-50 dark:bg-blue-950/40",
       iconColor: "text-blue-500",
       text: loading
-        ? "Building scan timeline"
-        : peakScanHour
-          ? `Peak scan time: ${peakScanHour.label}`
-          : latestScan
-            ? `Latest scan: ${latestScan.item_name}`
-            : "No scan timeline yet",
+        ? "Building transaction timeline"
+        : peakTransactionHour
+          ? `Peak transaction time: ${peakTransactionHour.label}`
+          : latestTransaction
+            ? `Latest transaction: ${latestTransaction.product_name ?? "Unassigned"}`
+            : "No transaction timeline yet",
       detail: loading
-        ? "Loading scan timeline..."
-        : peakScanHour
-          ? `${peakScanHour.count} scan(s), ${peakScanHour.share_percent}% of today's activity`
-          : latestScan
-            ? `Last recorded on ${formatScanDateTime(latestScan.created_at)}`
-            : "Your most active scan hour will appear after scans are logged.",
+        ? "Loading transaction timeline..."
+        : peakTransactionHour
+          ? `${peakTransactionHour.count} transaction(s), ${peakTransactionHour.share_percent}% of today's activity`
+          : latestTransaction
+            ? `Last recorded on ${formatDateTime(latestTransaction.created_at)}`
+            : "Your most active transaction hour will appear after transactions are logged.",
     },
   ];
 

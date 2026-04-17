@@ -99,6 +99,42 @@ function toNumber(value: unknown, fallbackValue = 0): number {
   return parsed;
 }
 
+function hasErrorCode(error: unknown, expectedCode: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  return String((error as { code?: unknown }).code ?? "") === expectedCode;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+
+  return String((error as { message?: unknown }).message ?? "");
+}
+
+function isMissingRelationError(error: unknown, relationName: string): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  const normalizedRelationName = relationName.toLowerCase();
+
+  return (
+    hasErrorCode(error, "42P01") ||
+    (message.includes(normalizedRelationName) && message.includes("does not exist"))
+  );
+}
+
+function isMissingColumnError(error: unknown, columnName: string): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  const normalizedColumnName = columnName.toLowerCase();
+
+  return (
+    hasErrorCode(error, "42703") ||
+    (message.includes(normalizedColumnName) && message.includes("does not exist"))
+  );
+}
+
 function mapInventoryItemRow(row: Record<string, unknown>): InventoryItemRow {
   return {
     id: String(row.id),
@@ -451,48 +487,117 @@ export async function confirmScanDeduction({
   const supabase = getSupabaseClient();
   const transactionIds: string[] = [];
   const imageUrl = await uploadImageForTransaction(imageFile, detection.image_hash);
+  const operationNotes = buildScanTransactionNotes(detection.item_name, notes);
+  let operationId: string | null = null;
 
-  for (const ingredient of detection.ingredients_to_deduct) {
-    const normalizedQuantity = Math.max(0, toNumber(ingredient.quantity, 0));
+  const { data: createdOperation, error: operationError } = await supabase
+    .from("transaction_operations")
+    .insert({
+      operation_type: "scan",
+      product_name: detection.item_name,
+      quantity: Math.max(1, toNumber(detection.quantity_estimate, 1)),
+      notes: operationNotes,
+      metadata: {
+        source: detection.source,
+        image_hash: detection.image_hash,
+        confidence: detection.confidence,
+        category: detection.category,
+      },
+    })
+    .select("id")
+    .single();
 
-    if (normalizedQuantity <= 0) {
-      continue;
+  if (operationError) {
+    if (!isMissingRelationError(operationError, "transaction_operations")) {
+      throw new Error(`Operation logging failed: ${operationError.message}`);
     }
+  } else {
+    operationId = String(createdOperation.id);
+  }
 
-    const inventoryItem = await getOrCreateInventoryItem(ingredient);
-    const stockDelta = toStockDelta(transactionType, normalizedQuantity);
-    const nextStockLevel = Math.max(0, inventoryItem.current_stock + stockDelta);
+  try {
+    for (const ingredient of detection.ingredients_to_deduct) {
+      const normalizedQuantity = Math.max(0, toNumber(ingredient.quantity, 0));
 
-    const { error: updateError } = await supabase
-      .from("inventory_items")
-      .update({ current_stock: nextStockLevel })
-      .eq("id", inventoryItem.id);
+      if (normalizedQuantity <= 0) {
+        continue;
+      }
 
-    if (updateError) {
-      throw new Error(`Inventory update failed: ${updateError.message}`);
-    }
+      const inventoryItem = await getOrCreateInventoryItem(ingredient);
+      const stockDelta = toStockDelta(transactionType, normalizedQuantity);
+      const nextStockLevel = Math.max(0, inventoryItem.current_stock + stockDelta);
 
-    const { data: createdTransaction, error: transactionError } = await supabase
-      .from("stock_transactions")
-      .insert({
+      const { error: updateError } = await supabase
+        .from("inventory_items")
+        .update({ current_stock: nextStockLevel })
+        .eq("id", inventoryItem.id);
+
+      if (updateError) {
+        throw new Error(`Inventory update failed: ${updateError.message}`);
+      }
+
+      const transactionPayload: Record<string, unknown> = {
         item_id: inventoryItem.id,
         transaction_type: transactionType,
         quantity: normalizedQuantity,
         image_url: imageUrl,
         detected_by_ai: true,
-        notes: buildScanTransactionNotes(detection.item_name, notes),
-      })
-      .select("id")
-      .single();
+        notes: operationNotes,
+      };
 
-    if (transactionError) {
-      throw new Error(`Transaction logging failed: ${transactionError.message}`);
+      if (operationId) {
+        transactionPayload.operation_id = operationId;
+      }
+
+      const { data: createdTransaction, error: transactionError } = await supabase
+        .from("stock_transactions")
+        .insert(transactionPayload)
+        .select("id")
+        .single();
+
+      if (transactionError) {
+        if (operationId && isMissingColumnError(transactionError, "operation_id")) {
+          const fallbackPayload: Record<string, unknown> = {
+            item_id: inventoryItem.id,
+            transaction_type: transactionType,
+            quantity: normalizedQuantity,
+            image_url: imageUrl,
+            detected_by_ai: true,
+            notes: operationNotes,
+          };
+
+          const { data: fallbackTransaction, error: fallbackError } = await supabase
+            .from("stock_transactions")
+            .insert(fallbackPayload)
+            .select("id")
+            .single();
+
+          if (fallbackError) {
+            throw new Error(`Transaction logging failed: ${fallbackError.message}`);
+          }
+
+          transactionIds.push(String(fallbackTransaction.id));
+          continue;
+        }
+
+        throw new Error(`Transaction logging failed: ${transactionError.message}`);
+      }
+
+      transactionIds.push(String(createdTransaction.id));
+    }
+  } catch (transactionLoopError) {
+    if (operationId) {
+      await supabase.from("transaction_operations").delete().eq("id", operationId);
     }
 
-    transactionIds.push(createdTransaction.id);
+    throw transactionLoopError;
   }
 
   if (transactionIds.length === 0) {
+    if (operationId) {
+      await supabase.from("transaction_operations").delete().eq("id", operationId);
+    }
+
     throw new Error("Nothing was deducted because all detected quantities were zero.");
   }
 
