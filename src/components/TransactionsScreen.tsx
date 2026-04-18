@@ -88,6 +88,11 @@ interface AiImagePreparationState {
   detail?: string;
 }
 
+interface TransactionsScreenProps {
+  autoOpenStockOutAiRequestId?: string | null;
+  onAutoOpenStockOutAiHandled?: () => void;
+}
+
 function formatDate(value: string): string {
   const parsedDate = new Date(value);
 
@@ -270,7 +275,10 @@ function buildSaleRequirements(
   });
 }
 
-export function TransactionsScreen() {
+export function TransactionsScreen({
+  autoOpenStockOutAiRequestId,
+  onAutoOpenStockOutAiHandled,
+}: TransactionsScreenProps) {
   const {
     operations,
     loading,
@@ -327,7 +335,8 @@ export function TransactionsScreen() {
   const [aiUnitPriceInput, setAiUnitPriceInput] = useState("");
   const [aiNotesInput, setAiNotesInput] = useState("");
   const [aiScanProgress, setAiScanProgress] = useState<AiScanProgressState | null>(null);
-  const [aiScanClockMs, setAiScanClockMs] = useState(() => Date.now());
+  const aiScanStartedAtRef = useRef<number | null>(null);
+  const [aiScanElapsedMs, setAiScanElapsedMs] = useState(0);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -466,8 +475,18 @@ export function TransactionsScreen() {
       return;
     }
 
+    if (aiScanStartedAtRef.current === null) {
+      aiScanStartedAtRef.current = performance.now();
+    }
+
     const intervalId = window.setInterval(() => {
-      setAiScanClockMs(Date.now());
+      const startedAt = aiScanStartedAtRef.current;
+
+      if (startedAt === null) {
+        return;
+      }
+
+      setAiScanElapsedMs(Math.max(0, performance.now() - startedAt));
     }, 200);
 
     return () => {
@@ -503,8 +522,10 @@ export function TransactionsScreen() {
 
   const resetAiForm = () => {
     aiImagePreparingRef.current = false;
+    aiScanStartedAtRef.current = null;
     setIsAiImagePreparing(false);
     setIsAiDisputing(false);
+    setAiScanElapsedMs(0);
     setAiImagePreparation(null);
     setAiScanProgress(null);
     setAiImage(null);
@@ -561,6 +582,15 @@ export function TransactionsScreen() {
     setActionError(null);
     resetAiForm();
   };
+
+  useEffect(() => {
+    if (!autoOpenStockOutAiRequestId) {
+      return;
+    }
+
+    openAiStockOutModal();
+    onAutoOpenStockOutAiHandled?.();
+  }, [autoOpenStockOutAiRequestId, onAutoOpenStockOutAiHandled]);
 
   const closeManualCreateModal = () => {
     if (isSubmitting) {
@@ -732,6 +762,8 @@ export function TransactionsScreen() {
       message: "Preparing scan...",
       started_at: Date.now(),
     });
+    aiScanStartedAtRef.current = performance.now();
+    setAiScanElapsedMs(0);
     setIsAiDisputing(false);
     setIsAiScanning(true);
 
@@ -764,6 +796,8 @@ export function TransactionsScreen() {
       setIsAiScanning(false);
       aiProgressClearTimeoutRef.current = window.setTimeout(() => {
         setAiScanProgress(null);
+        aiScanStartedAtRef.current = null;
+        setAiScanElapsedMs(0);
         aiProgressClearTimeoutRef.current = null;
       }, 1200);
     }
@@ -795,6 +829,8 @@ export function TransactionsScreen() {
       message: "Dispute submitted. Clearing cache and re-scanning...",
       started_at: Date.now(),
     });
+    aiScanStartedAtRef.current = performance.now();
+    setAiScanElapsedMs(0);
     setIsAiDisputing(true);
     setIsAiScanning(true);
 
@@ -833,6 +869,8 @@ export function TransactionsScreen() {
       setIsAiScanning(false);
       aiProgressClearTimeoutRef.current = window.setTimeout(() => {
         setAiScanProgress(null);
+        aiScanStartedAtRef.current = null;
+        setAiScanElapsedMs(0);
         aiProgressClearTimeoutRef.current = null;
       }, 1200);
     }
@@ -1344,6 +1382,19 @@ export function TransactionsScreen() {
                 </div>
               )}
 
+              {actionError && aiImage && !isAiImagePreparing && !isAiScanning && !isAiDisputing && !isAiSubmitting ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleAiScan}
+                    className="px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-700 text-xs font-bold disabled:opacity-60"
+                    disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
+                  >
+                    Retry Scan
+                  </button>
+                </div>
+              ) : null}
+
               {aiProductCatalog.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                   No active products are configured. Add products and recipes first.
@@ -1494,7 +1545,7 @@ export function TransactionsScreen() {
                         />
                       </div>
                       <p className="text-xs text-gray-500">
-                        Elapsed {formatElapsedMs(aiScanClockMs - aiScanProgress.started_at)}
+                        Elapsed {formatElapsedMs(aiScanElapsedMs)}
                       </p>
                     </div>
                   ) : null}

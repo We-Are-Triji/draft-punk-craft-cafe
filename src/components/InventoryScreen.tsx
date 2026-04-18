@@ -96,6 +96,11 @@ interface AiImagePreparationState {
   detail?: string;
 }
 
+interface InventoryScreenProps {
+  autoOpenStockInAiRequestId?: string | null;
+  onAutoOpenStockInAiHandled?: () => void;
+}
+
 function normalizeValue(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -282,7 +287,10 @@ function isSupportedImageFile(imageFile: File): boolean {
   );
 }
 
-export function InventoryScreen() {
+export function InventoryScreen({
+  autoOpenStockInAiRequestId,
+  onAutoOpenStockInAiHandled,
+}: InventoryScreenProps) {
   const {
     items,
     loading: inventoryLoading,
@@ -319,7 +327,8 @@ export function InventoryScreen() {
   const [aiScanResult, setAiScanResult] = useState<ScanDetectionResult | null>(null);
   const [aiLines, setAiLines] = useState<AiLineDraft[]>([]);
   const [aiScanProgress, setAiScanProgress] = useState<AiScanProgressState | null>(null);
-  const [aiScanClockMs, setAiScanClockMs] = useState(() => Date.now());
+  const aiScanStartedAtRef = useRef<number | null>(null);
+  const [aiScanElapsedMs, setAiScanElapsedMs] = useState(0);
   const [isAiImagePreparing, setIsAiImagePreparing] = useState(false);
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [isAiDisputing, setIsAiDisputing] = useState(false);
@@ -436,8 +445,18 @@ export function InventoryScreen() {
       return;
     }
 
+    if (aiScanStartedAtRef.current === null) {
+      aiScanStartedAtRef.current = performance.now();
+    }
+
     const intervalId = window.setInterval(() => {
-      setAiScanClockMs(Date.now());
+      const startedAt = aiScanStartedAtRef.current;
+
+      if (startedAt === null) {
+        return;
+      }
+
+      setAiScanElapsedMs(Math.max(0, performance.now() - startedAt));
     }, 200);
 
     return () => {
@@ -468,8 +487,10 @@ export function InventoryScreen() {
 
   const resetAiState = () => {
     aiImagePreparingRef.current = false;
+    aiScanStartedAtRef.current = null;
     setIsAiImagePreparing(false);
     setIsAiDisputing(false);
+    setAiScanElapsedMs(0);
     setAiImagePreparation(null);
     setAiScanProgress(null);
     setAiImage(null);
@@ -519,6 +540,15 @@ export function InventoryScreen() {
     setActionError(null);
     resetAiState();
   };
+
+  useEffect(() => {
+    if (!autoOpenStockInAiRequestId) {
+      return;
+    }
+
+    openAiStockIn();
+    onAutoOpenStockInAiHandled?.();
+  }, [autoOpenStockInAiRequestId, onAutoOpenStockInAiHandled]);
 
   const closeStockInModal = () => {
     if (
@@ -688,6 +718,8 @@ export function InventoryScreen() {
       message: "Preparing scan...",
       started_at: Date.now(),
     });
+    aiScanStartedAtRef.current = performance.now();
+    setAiScanElapsedMs(0);
     setIsAiDisputing(false);
     setIsAiScanning(true);
 
@@ -720,6 +752,8 @@ export function InventoryScreen() {
       setIsAiScanning(false);
       aiProgressClearTimeoutRef.current = window.setTimeout(() => {
         setAiScanProgress(null);
+        aiScanStartedAtRef.current = null;
+        setAiScanElapsedMs(0);
         aiProgressClearTimeoutRef.current = null;
       }, 1200);
     }
@@ -753,6 +787,8 @@ export function InventoryScreen() {
       message: "Dispute submitted. Clearing cache and re-scanning...",
       started_at: Date.now(),
     });
+    aiScanStartedAtRef.current = performance.now();
+    setAiScanElapsedMs(0);
     setIsAiDisputing(true);
     setIsAiScanning(true);
 
@@ -791,6 +827,8 @@ export function InventoryScreen() {
       setIsAiScanning(false);
       aiProgressClearTimeoutRef.current = window.setTimeout(() => {
         setAiScanProgress(null);
+        aiScanStartedAtRef.current = null;
+        setAiScanElapsedMs(0);
         aiProgressClearTimeoutRef.current = null;
       }, 1200);
     }
@@ -1183,6 +1221,19 @@ export function InventoryScreen() {
                 </div>
               )}
 
+              {actionError && aiImage && !isAiImagePreparing && !isAiScanning && !isAiDisputing && !isAiConfirming ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleAiScan}
+                    className="px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-700 text-xs font-bold disabled:opacity-60"
+                    disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming}
+                  >
+                    Retry Scan
+                  </button>
+                </div>
+              ) : null}
+
               {recipeIngredientCatalog.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                   No recipe ingredients are configured yet. Add ingredients on Recipes first.
@@ -1344,7 +1395,7 @@ export function InventoryScreen() {
                         />
                       </div>
                       <p className="text-xs text-gray-500">
-                        Elapsed {formatElapsedMs(aiScanClockMs - aiScanProgress.started_at)}
+                        Elapsed {formatElapsedMs(aiScanElapsedMs)}
                       </p>
                     </div>
                   ) : null}

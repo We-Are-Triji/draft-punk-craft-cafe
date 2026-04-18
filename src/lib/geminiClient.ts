@@ -70,6 +70,27 @@ function buildStockInCatalogPrompt(
   ].join("\n");
 }
 
+function buildStockInCatalogRecoveryPrompt(
+  ingredients: StockInCatalogIngredient[]
+): string {
+  const catalogText = ingredients
+    .map(
+      (ingredient, index) =>
+        `${index + 1}. ${ingredient.name} | ${ingredient.unit} | ${ingredient.category}`
+    )
+    .join("\n");
+
+  return [
+    "Return ONLY a compact single-line JSON object.",
+    "Use ONLY names and units from this ingredient catalog.",
+    "Schema:",
+    '{"item_name":"string","confidence":"high|medium|low","quantity_estimate":number|null,"unit":"string","ingredients_to_deduct":[{"item_name":"string","category":"string","quantity":number|null,"unit":"string"}]}',
+    "If quantity is unclear, set quantity_estimate or quantity to null.",
+    "Ingredient Catalog:",
+    catalogText,
+  ].join("\n");
+}
+
 function buildProductCatalogPrompt(products: ProductCatalogCandidate[]): string {
   const productList = products
     .map(
@@ -460,8 +481,24 @@ function extractTextEntries(value: unknown): string[] {
     textEntries.push(record.text.trim());
   }
 
+  if (typeof record.output_text === "string" && record.output_text.trim()) {
+    textEntries.push(record.output_text.trim());
+  }
+
+  if (typeof record.arguments === "string" && record.arguments.trim()) {
+    textEntries.push(record.arguments.trim());
+  }
+
   if (typeof record.content === "string" && record.content.trim()) {
     textEntries.push(record.content.trim());
+  }
+
+  if (record.parts !== undefined && record.parts !== null) {
+    textEntries.push(...extractTextEntries(record.parts));
+  }
+
+  if (record.arguments !== undefined && record.arguments !== null) {
+    textEntries.push(...extractTextEntries(record.arguments));
   }
 
   if (record.content !== undefined && record.content !== null) {
@@ -478,6 +515,9 @@ function extractOpenRouterResponseText(payload: unknown): string {
         message?: {
           content?: unknown;
           reasoning?: unknown;
+          refusal?: unknown;
+          tool_calls?: unknown;
+          function_call?: unknown;
         };
       }>;
     }
@@ -497,6 +537,22 @@ function extractOpenRouterResponseText(payload: unknown): string {
 
   if (responsesApiOutputText) {
     return responsesApiOutputText;
+  }
+
+  const toolCallArgumentsText = extractTextEntries(message?.tool_calls)
+    .join("\n")
+    .trim();
+
+  if (toolCallArgumentsText) {
+    return toolCallArgumentsText;
+  }
+
+  const functionCallArgumentsText = extractTextEntries(message?.function_call)
+    .join("\n")
+    .trim();
+
+  if (functionCallArgumentsText) {
+    return functionCallArgumentsText;
   }
 
   const legacyText =
@@ -524,7 +580,28 @@ function extractOpenRouterResponseText(payload: unknown): string {
     }
   }
 
+  const refusalText = extractTextEntries(message?.refusal).join("\n").trim();
+
+  if (refusalText) {
+    throw new Error(`OpenRouter refused to complete the request: ${refusalText}`);
+  }
+
   throw new Error("OpenRouter returned an empty response.");
+}
+
+function isOpenRouterResponseContentIssue(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalized = error.message.trim().toLowerCase();
+
+  return (
+    normalized.includes("empty response") ||
+    normalized.includes("malformed json") ||
+    normalized.includes("valid json") ||
+    normalized.includes("truncated")
+  );
 }
 
 function assertOpenRouterPayloadHasValidJson(payload: unknown): void {
@@ -764,11 +841,41 @@ async function requestGeminiResponsePayload(
         : {}),
     };
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, appEnv.openRouterRequestTimeoutMs);
+
+    let response: Response;
+
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+    } catch (fetchError) {
+      const isAbortError =
+        (typeof DOMException !== "undefined" &&
+          fetchError instanceof DOMException &&
+          fetchError.name === "AbortError") ||
+        (fetchError instanceof Error && fetchError.name === "AbortError");
+
+      if (isAbortError) {
+        throw {
+          status: 408,
+          message: `OpenRouter request timed out after ${Math.ceil(
+            appEnv.openRouterRequestTimeoutMs / 1000
+          )}s.`,
+          model,
+        };
+      }
+
+      throw fetchError;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     let payload: unknown = null;
 
@@ -955,6 +1062,11 @@ async function requestGeminiPayloadWithFallback(
   onProgress?: (event: AiModelProgressEvent) => void
 ): Promise<unknown> {
   geminiUsageState.total_requests += 1;
+  const totalScanTimeoutMs = Math.max(
+    appEnv.openRouterRequestTimeoutMs + 5_000,
+    appEnv.openRouterTotalScanTimeoutMs
+  );
+  const deadlineAt = Date.now() + totalScanTimeoutMs;
 
   onProgress?.({
     step: "encoding",
@@ -982,9 +1094,21 @@ async function requestGeminiPayloadWithFallback(
   const maxRetries = Math.max(0, appEnv.openRouterMaxRetries);
   let lastError: GeminiRequestErrorShape | null = null;
   let stoppedByRateLimit = false;
+  let timedOut = false;
 
+  modelLoop:
   for (const model of modelsToTry) {
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      if (Date.now() >= deadlineAt) {
+        lastError = {
+          status: 408,
+          model,
+          message: `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s.`,
+        };
+        timedOut = true;
+        break modelLoop;
+      }
+
       try {
         const responsePayload = await requestGeminiResponsePayload(
           file,
@@ -1017,12 +1141,25 @@ async function requestGeminiPayloadWithFallback(
 
         const isRateLimited = normalizedError.status === 429;
         const isTransientError =
-          normalizedError.status >= 500 || normalizedError.status === 0;
+          normalizedError.status >= 500 ||
+          normalizedError.status === 0 ||
+          normalizedError.status === 408;
         const canRetry = attempt < maxRetries && isTransientError;
 
         if (canRetry) {
           geminiUsageState.total_retries += 1;
           const retryDelayMs = Math.min(4_000, 600 * (attempt + 1));
+
+          if (Date.now() + retryDelayMs >= deadlineAt) {
+            timedOut = true;
+            lastError = {
+              status: 408,
+              model,
+              message: `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s.`,
+            };
+            break modelLoop;
+          }
+
           onProgress?.({
             step: "retry_wait",
             model,
@@ -1048,6 +1185,12 @@ async function requestGeminiPayloadWithFallback(
   }
 
   geminiUsageState.total_failures += 1;
+
+  if (timedOut || (lastError && lastError.status === 408)) {
+    throw new Error(
+      `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s. Please tap Retry Scan.`
+    );
+  }
 
   if (
     stoppedByRateLimit &&
@@ -1288,11 +1431,28 @@ export async function detectStockInWithCatalogGemini(
     });
   }
   const prompt = buildStockInCatalogPrompt(ingredientCatalog);
-  const responsePayload = await requestGeminiPayloadWithFallback(
-    file,
-    prompt,
-    onProgress
-  );
+  let responsePayload: unknown;
+
+  try {
+    responsePayload = await requestGeminiPayloadWithFallback(
+      file,
+      prompt,
+      onProgress
+    );
+  } catch (requestError) {
+    if (!isOpenRouterResponseContentIssue(requestError)) {
+      throw requestError;
+    }
+
+    // Retry once with a shorter prompt when content extraction failed.
+    const recoveryPrompt = buildStockInCatalogRecoveryPrompt(ingredientCatalog);
+    responsePayload = await requestGeminiPayloadWithFallback(
+      file,
+      recoveryPrompt,
+      onProgress
+    );
+  }
+
   onProgress?.({
     step: "parsing",
   });

@@ -7,17 +7,21 @@ import {
 } from "lucide-react";
 import type { Tab } from "@/components/layout/Sidebar";
 
+export type QuickShortcutAction = "open-stock-in-ai" | "open-stock-out-ai";
+
 interface ShortcutItem {
   id: string;
   title: string;
   description: string;
   tab: Tab;
+  action?: QuickShortcutAction;
   icon: typeof Package;
   iconStyle: string;
 }
 
 interface QuickShortcutsProps {
   onNavigate?: (tab: Tab) => void;
+  onShortcutAction?: (action: QuickShortcutAction) => void;
 }
 
 const shortcutItems: ShortcutItem[] = [
@@ -26,6 +30,7 @@ const shortcutItems: ShortcutItem[] = [
     title: "Stock In",
     description: "AI or manual stock-in from Inventory.",
     tab: "inventory",
+    action: "open-stock-in-ai",
     icon: Package,
     iconStyle: "bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400 ring-cyan-100 dark:ring-cyan-900/30",
   },
@@ -34,6 +39,7 @@ const shortcutItems: ShortcutItem[] = [
     title: "Stock Out",
     description: "Create stock-out via AI scan or manual entry.",
     tab: "transactions",
+    action: "open-stock-out-ai",
     icon: Camera,
     iconStyle: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 ring-amber-100 dark:ring-amber-900/30",
   },
@@ -55,7 +61,7 @@ const shortcutItems: ShortcutItem[] = [
   },
 ];
 
-export function QuickShortcuts({ onNavigate }: QuickShortcutsProps) {
+export function QuickShortcuts({ onNavigate, onShortcutAction }: QuickShortcutsProps) {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -68,9 +74,16 @@ export function QuickShortcuts({ onNavigate }: QuickShortcutsProps) {
           <button
             key={item.id}
             type="button"
-            onClick={() => onNavigate?.(item.tab)}
+            onClick={() => {
+              if (item.action && onShortcutAction) {
+                onShortcutAction(item.action);
+                return;
+              }
+
+              onNavigate?.(item.tab);
+            }}
             className="group min-w-0 rounded-xl border border-border bg-card text-left p-4 hover:shadow-md hover:border-border/80 transition-all duration-200 disabled:opacity-60"
-            disabled={!onNavigate}
+            disabled={!onNavigate && !onShortcutAction}
           >
             <div className="flex items-start justify-between gap-3 min-w-0">
               <div

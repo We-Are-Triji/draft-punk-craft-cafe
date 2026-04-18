@@ -73,6 +73,16 @@ export const appEnv = {
     runtimeEnv.VITE_OPENROUTER_MAX_OUTPUT_TOKENS,
     320
   ),
+  openRouterRequestTimeoutMs: toPositiveInteger(
+    runtimeEnv.VITE_OPENROUTER_REQUEST_TIMEOUT_MS ??
+      runtimeEnv.VITE_GEMINI_REQUEST_TIMEOUT_MS,
+    25_000
+  ),
+  openRouterTotalScanTimeoutMs: toPositiveInteger(
+    runtimeEnv.VITE_OPENROUTER_TOTAL_SCAN_TIMEOUT_MS ??
+      runtimeEnv.VITE_GEMINI_TOTAL_SCAN_TIMEOUT_MS,
+    70_000
+  ),
   openRouterForceJsonResponse: toBoolean(
     runtimeEnv.VITE_OPENROUTER_FORCE_JSON_RESPONSE,
     true

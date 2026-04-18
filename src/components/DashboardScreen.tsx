@@ -6,18 +6,20 @@ import { TopDishesChart } from "@/components/dashboard/TopDishesChart";
 import { QuickInsights } from "@/components/dashboard/QuickInsights";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import type { Tab } from "@/components/layout/Sidebar";
+import type { QuickShortcutAction } from "@/components/dashboard/QuickShortcuts";
 
 interface DashboardScreenProps {
   onNavigate?: (tab: Tab) => void;
+  onShortcutAction?: (action: QuickShortcutAction) => void;
 }
 
-export function DashboardScreen({ onNavigate }: DashboardScreenProps) {
+export function DashboardScreen({ onNavigate, onShortcutAction }: DashboardScreenProps) {
   const { metrics, loading, error } = useDashboardMetrics();
 
   return (
     <div className="flex flex-col gap-6">
       <WelcomeBanner />
-      <QuickShortcuts onNavigate={onNavigate} />
+      <QuickShortcuts onNavigate={onNavigate} onShortcutAction={onShortcutAction} />
 
       {error ? (
         <div className="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">
