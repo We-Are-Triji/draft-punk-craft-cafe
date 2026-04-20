@@ -28,6 +28,65 @@ export function isHeicOrHeifFile(file: File): boolean {
   return HEIC_MIME_TYPES.has(file.type) || hasHeicExtension(file.name);
 }
 
+function toCameraPermissionError(error: unknown): Error {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return new Error(
+        "Camera permission was denied. Allow camera access or use photo upload instead."
+      );
+    }
+
+    if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
+      return new Error(
+        "No usable camera was found on this device. Use photo upload instead."
+      );
+    }
+
+    if (error.name === "NotReadableError") {
+      return new Error(
+        "Camera is currently unavailable. Close other camera apps and try again."
+      );
+    }
+  }
+
+  return new Error(
+    "Unable to access camera on this device. Use photo upload instead."
+  );
+}
+
+export async function requestCameraPermissionForStillPhoto(): Promise<void> {
+  if (
+    typeof navigator === "undefined" ||
+    !navigator.mediaDevices ||
+    typeof navigator.mediaDevices.getUserMedia !== "function"
+  ) {
+    throw new Error(
+      "This browser does not support camera capture. Use photo upload instead."
+    );
+  }
+
+  let stream: MediaStream | null = null;
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: {
+          ideal: "environment",
+        },
+      },
+    });
+  } catch (cameraError) {
+    throw toCameraPermissionError(cameraError);
+  } finally {
+    if (stream) {
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+    }
+  }
+}
+
 function getBaseName(fileName: string): string {
   const trimmed = fileName.trim();
   const dotIndex = trimmed.lastIndexOf(".");

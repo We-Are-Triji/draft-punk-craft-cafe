@@ -33,6 +33,7 @@ import {
 import {
   isHeicOrHeifFile,
   normalizeImageForAiScan,
+  requestCameraPermissionForStillPhoto,
   waitForNextPaint,
 } from "@/lib/imageUpload";
 import { evaluateImageQualityForAi } from "@/lib/imageQuality";
@@ -66,6 +67,7 @@ const SUPPORTED_IMAGE_EXTENSIONS = [
 ];
 
 type OperationFilter = "all" | OperationType;
+type AiImageInputChoice = "none" | "upload" | "camera";
 
 interface SaleRequirement {
   ingredient_name: string;
@@ -315,7 +317,8 @@ export function TransactionsScreen({
   const [notesInput, setNotesInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const aiFileInputRef = useRef<HTMLInputElement | null>(null);
+  const aiUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const aiCameraInputRef = useRef<HTMLInputElement | null>(null);
   const aiImagePreparingRef = useRef(false);
   const aiProgressClearTimeoutRef = useRef<number | null>(null);
   const aiImagePreparationClearTimeoutRef = useRef<number | null>(null);
@@ -324,6 +327,8 @@ export function TransactionsScreen({
   const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
   const [aiImagePreparation, setAiImagePreparation] =
     useState<AiImagePreparationState | null>(null);
+  const [aiImageInputChoice, setAiImageInputChoice] =
+    useState<AiImageInputChoice>("none");
   const [isAiDragging, setIsAiDragging] = useState(false);
   const [isAiImagePreparing, setIsAiImagePreparing] = useState(false);
   const [isAiScanning, setIsAiScanning] = useState(false);
@@ -527,6 +532,7 @@ export function TransactionsScreen({
     setIsAiDisputing(false);
     setAiScanElapsedMs(0);
     setAiImagePreparation(null);
+    setAiImageInputChoice("none");
     setAiScanProgress(null);
     setAiImage(null);
     setAiScanResult(null);
@@ -583,6 +589,36 @@ export function TransactionsScreen({
     resetAiForm();
   };
 
+  const openAiUploadPicker = () => {
+    if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting) {
+      return;
+    }
+
+    setActionError(null);
+    setAiImageInputChoice("upload");
+    aiUploadInputRef.current?.click();
+  };
+
+  const openAiCameraCapture = async () => {
+    if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting) {
+      return;
+    }
+
+    setActionError(null);
+
+    try {
+      await requestCameraPermissionForStillPhoto();
+      setAiImageInputChoice("camera");
+      aiCameraInputRef.current?.click();
+    } catch (cameraError) {
+      setActionError(
+        cameraError instanceof Error
+          ? cameraError.message
+          : "Camera permission is required to take a photo."
+      );
+    }
+  };
+
   useEffect(() => {
     if (!autoOpenStockOutAiRequestId) {
       return;
@@ -634,11 +670,11 @@ export function TransactionsScreen({
 
     setAiImagePreparation({
       percent: 8,
-      message: "Loading preview...",
-      detail: "Rendering selected photo in the preview panel.",
+      message: "Preparing photo...",
+      detail: "Validating file before scan.",
     });
 
-    setAiImage(imageFile);
+    setAiImage(null);
     setAiScanResult(null);
     setAiSelectedProductId(null);
     setAiQuantityInput("1");
@@ -648,7 +684,7 @@ export function TransactionsScreen({
         URL.revokeObjectURL(currentPreview);
       }
 
-      return URL.createObjectURL(imageFile);
+      return null;
     });
 
     try {
@@ -667,16 +703,13 @@ export function TransactionsScreen({
 
       setActionError(null);
       setAiImage(normalizedImageFile);
+      setAiPreviewUrl((currentPreview) => {
+        if (currentPreview) {
+          URL.revokeObjectURL(currentPreview);
+        }
 
-      if (inputWasHeic && normalizedImageFile !== imageFile) {
-        setAiPreviewUrl((currentPreview) => {
-          if (currentPreview) {
-            URL.revokeObjectURL(currentPreview);
-          }
-
-          return URL.createObjectURL(normalizedImageFile);
-        });
-      }
+        return URL.createObjectURL(normalizedImageFile);
+      });
 
       setAiImagePreparation({
         percent: 74,
@@ -708,6 +741,13 @@ export function TransactionsScreen({
       setAiSelectedProductId(null);
       setAiQuantityInput("1");
       setAiUnitPriceInput("");
+      setAiPreviewUrl((currentPreview) => {
+        if (currentPreview) {
+          URL.revokeObjectURL(currentPreview);
+        }
+
+        return null;
+      });
       setAiImagePreparation(null);
       setActionError(
         imageError instanceof Error
@@ -727,6 +767,11 @@ export function TransactionsScreen({
       return;
     }
 
+    if (aiImageInputChoice !== "upload") {
+      setActionError("Choose Upload Photo first, then drag and drop your image.");
+      return;
+    }
+
     setIsAiDragging(false);
 
     const droppedFile = event.dataTransfer.files?.[0];
@@ -742,7 +787,7 @@ export function TransactionsScreen({
     }
 
     if (!aiImage) {
-      setActionError("Choose or drop an image before scanning.");
+      setActionError("Choose camera or upload a photo before scanning.");
       return;
     }
 
@@ -809,7 +854,7 @@ export function TransactionsScreen({
     }
 
     if (!aiImage) {
-      setActionError("Choose or drop an image before scanning.");
+      setActionError("Choose camera or upload a photo before scanning.");
       return;
     }
 
@@ -1406,7 +1451,13 @@ export function TransactionsScreen({
                     onDragOver={(event) => {
                       event.preventDefault();
 
-                      if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting) {
+                      if (
+                        isAiImagePreparing ||
+                        isAiScanning ||
+                        isAiDisputing ||
+                        isAiSubmitting ||
+                        aiImageInputChoice !== "upload"
+                      ) {
                         return;
                       }
 
@@ -1420,11 +1471,13 @@ export function TransactionsScreen({
                       setIsAiDragging(false);
                     }}
                     className={`relative flex min-h-48 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-                      isAiDragging ? "border-amber-600 bg-amber-50" : "border-gray-200"
+                      aiImageInputChoice === "upload" && isAiDragging
+                        ? "border-amber-600 bg-amber-50"
+                        : "border-gray-200"
                     }`}
                   >
                     <input
-                      ref={aiFileInputRef}
+                      ref={aiUploadInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
                       className="hidden"
@@ -1440,50 +1493,90 @@ export function TransactionsScreen({
                       }}
                     />
 
-                    {aiPreviewUrl ? (
-                      <img
-                        src={aiPreviewUrl}
-                        alt="AI stock-out preview"
-                        className="max-h-56 w-full max-w-md rounded-lg border border-gray-200 dark:border-border object-contain"
-                      />
-                    ) : (
-                      <>
-                        <UploadCloud className="h-10 w-10 text-gray-400 dark:text-muted-foreground" />
-                        <div className="space-y-1">
-                          <p className="font-medium text-gray-700 dark:text-foreground">Drop image here</p>
-                          <p className="text-sm text-gray-500 dark:text-muted-foreground">
-                            Or choose an image to classify product and estimate quantity.
-                          </p>
-                        </div>
-                      </>
-                    )}
+                    <input
+                      ref={aiCameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
+                      onChange={(event) => {
+                        const nextFile = event.currentTarget.files?.[0];
+
+                        if (nextFile) {
+                          void setAiImageFile(nextFile);
+                        }
+
+                        event.currentTarget.value = "";
+                      }}
+                    />
 
                     {isAiImagePreparing && aiImagePreparation ? (
-                      <div className="absolute inset-0 rounded-xl bg-black/55 text-white p-4 flex flex-col items-center justify-center gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/85">
+                      <>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-muted-foreground">
                           Preparing Photo
                         </p>
-                        <p className="text-sm font-semibold text-center max-w-lg">
+                        <p className="text-sm font-semibold text-center max-w-lg text-gray-700 dark:text-foreground">
                           {aiImagePreparation.message}
                         </p>
-                        <div className="w-full max-w-md h-2 bg-white/25 rounded-full overflow-hidden">
+                        <div className="w-full max-w-md h-2 bg-gray-200 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-white transition-[width] duration-300"
+                            className="h-full bg-[#3E2723] transition-[width] duration-300"
                             style={{
                               width: `${Math.max(8, Math.round(aiImagePreparation.percent))}%`,
                             }}
                           />
                         </div>
-                        <p className="text-[11px] font-semibold text-white/80">
+                        <p className="text-[11px] font-semibold text-gray-500 dark:text-muted-foreground">
                           {Math.round(aiImagePreparation.percent)}%
                         </p>
                         {aiImagePreparation.detail ? (
-                          <p className="text-[11px] text-white/75 text-center max-w-2xl">
+                          <p className="text-[11px] text-gray-500 dark:text-muted-foreground text-center max-w-2xl">
                             {aiImagePreparation.detail}
                           </p>
                         ) : null}
-                      </div>
-                    ) : null}
+                      </>
+                    ) : aiPreviewUrl ? (
+                      <img
+                        src={aiPreviewUrl}
+                        alt="AI stock-out preview"
+                        className="max-h-56 w-full max-w-md rounded-lg border border-gray-200 dark:border-border object-contain"
+                      />
+                    ) : aiImageInputChoice === "upload" ? (
+                      <>
+                        <UploadCloud className="h-10 w-10 text-gray-400 dark:text-muted-foreground" />
+                        <div className="space-y-1">
+                          <p className="font-medium text-gray-700 dark:text-foreground">Drop image here</p>
+                          <p className="text-sm text-gray-500 dark:text-muted-foreground">
+                            Or tap Upload Photo again to browse files.
+                          </p>
+                        </div>
+                      </>
+                    ) : aiImageInputChoice === "camera" ? (
+                      <>
+                        <UploadCloud className="h-10 w-10 text-gray-400 dark:text-muted-foreground" />
+                        <div className="space-y-1">
+                          <p className="font-medium text-gray-700 dark:text-foreground">
+                            Camera mode selected
+                          </p>
+                          <p className="text-sm text-gray-500 dark:text-muted-foreground">
+                            Tap Use Device Camera to take a photo.
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="h-10 w-10 text-gray-400 dark:text-muted-foreground" />
+                        <div className="space-y-1">
+                          <p className="font-medium text-gray-700 dark:text-foreground">
+                            Choose photo source first
+                          </p>
+                          <p className="text-sm text-gray-500 dark:text-muted-foreground">
+                            Select Use Device Camera or Upload Photo below.
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="rounded-lg border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/40 px-3 py-2">
@@ -1498,11 +1591,21 @@ export function TransactionsScreen({
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => aiFileInputRef.current?.click()}
+                      onClick={() => {
+                        void openAiCameraCapture();
+                      }}
                       className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
                     >
-                      Choose Image
+                      Use Device Camera
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openAiUploadPicker}
+                      className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
+                    >
+                      Upload Photo
                     </button>
                     <button
                       type="button"
