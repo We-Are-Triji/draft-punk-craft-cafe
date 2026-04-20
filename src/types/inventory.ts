@@ -88,7 +88,14 @@ export interface CreateSaleTransactionInput {
   notes?: string | null;
 }
 
+export interface ConfirmDeductionLine {
+  item_name: string;
+  unit: string;
+  quantity: number;
+}
+
 export interface ConfirmDeductionResult {
   deductionsApplied: number;
   transactionIds: string[];
+  appliedLines: ConfirmDeductionLine[];
 }

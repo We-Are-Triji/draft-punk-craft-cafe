@@ -39,7 +39,9 @@ Notes:
 
 ## Supabase Schema
 
-Run the SQL migration in `supabase/migrations/20260415_issue8_inventory_ai_scan.sql` inside the Supabase SQL editor.
+Run all SQL files in `supabase/migrations/` in timestamp order inside the Supabase SQL editor.
+
+The latest migration (`20260420_issue11_scan_images_bucket.sql`) creates/configures the `scan-images` Storage bucket and required upload/read policies used by stock-in and stock-out image confirmations.
 
 It creates:
 

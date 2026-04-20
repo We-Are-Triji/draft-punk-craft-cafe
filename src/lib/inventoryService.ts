@@ -21,6 +21,7 @@ import {
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import type {
   ConfidenceLevel,
+  ConfirmDeductionLine,
   ConfirmDeductionResult,
   IngredientDeduction,
   InventoryItemRow,
@@ -829,6 +830,46 @@ function buildManualStockInNotes(notes: string | undefined): string {
   return trimmedNotes;
 }
 
+function summarizeAppliedLines(
+  lines: ConfirmDeductionLine[]
+): ConfirmDeductionLine[] {
+  const mergedLines = new Map<string, ConfirmDeductionLine>();
+
+  for (const line of lines) {
+    const itemName = line.item_name.trim();
+    const unit = line.unit.trim();
+    const quantity = Number(line.quantity);
+
+    if (!itemName || !unit || !Number.isFinite(quantity) || quantity <= 0) {
+      continue;
+    }
+
+    const key = `${itemName.toLowerCase()}|${unit.toLowerCase()}`;
+    const existing = mergedLines.get(key);
+
+    if (existing) {
+      existing.quantity = Number((existing.quantity + quantity).toFixed(3));
+      continue;
+    }
+
+    mergedLines.set(key, {
+      item_name: itemName,
+      unit,
+      quantity: Number(quantity.toFixed(3)),
+    });
+  }
+
+  return [...mergedLines.values()].sort((left, right) => {
+    const byName = left.item_name.localeCompare(right.item_name);
+
+    if (byName !== 0) {
+      return byName;
+    }
+
+    return left.unit.localeCompare(right.unit);
+  });
+}
+
 export async function recordManualStockIn({
   entries,
   notes,
@@ -854,6 +895,7 @@ export async function recordManualStockIn({
 
   const supabase = getSupabaseClient();
   const transactionIds: string[] = [];
+  const appliedLines: ConfirmDeductionLine[] = [];
   const operationNotes = buildManualStockInNotes(notes);
   let operationId: string | null = null;
 
@@ -945,6 +987,11 @@ export async function recordManualStockIn({
           }
 
           transactionIds.push(String(fallbackTransaction.id));
+          appliedLines.push({
+            item_name: entry.item_name,
+            unit: entry.unit,
+            quantity: Number(entry.quantity.toFixed(3)),
+          });
           continue;
         }
 
@@ -952,6 +999,11 @@ export async function recordManualStockIn({
       }
 
       transactionIds.push(String(createdTransaction.id));
+      appliedLines.push({
+        item_name: entry.item_name,
+        unit: entry.unit,
+        quantity: Number(entry.quantity.toFixed(3)),
+      });
     }
   } catch (entryError) {
     if (operationId) {
@@ -964,6 +1016,7 @@ export async function recordManualStockIn({
   return {
     deductionsApplied: transactionIds.length,
     transactionIds,
+    appliedLines: summarizeAppliedLines(appliedLines),
   };
 }
 
@@ -1491,6 +1544,7 @@ export async function confirmScanDeduction({
 
   const supabase = getSupabaseClient();
   const transactionIds: string[] = [];
+  const appliedLines: ConfirmDeductionLine[] = [];
   const imageUrl = await uploadImageForTransaction(imageFile, detection.image_hash);
   const operationNotes = buildScanTransactionNotes(detection.item_name, notes);
   let operationId: string | null = null;
@@ -1582,6 +1636,11 @@ export async function confirmScanDeduction({
           }
 
           transactionIds.push(String(fallbackTransaction.id));
+          appliedLines.push({
+            item_name: ingredient.item_name,
+            unit: ingredient.unit,
+            quantity: Number(normalizedQuantity.toFixed(3)),
+          });
           continue;
         }
 
@@ -1589,6 +1648,11 @@ export async function confirmScanDeduction({
       }
 
       transactionIds.push(String(createdTransaction.id));
+      appliedLines.push({
+        item_name: ingredient.item_name,
+        unit: ingredient.unit,
+        quantity: Number(normalizedQuantity.toFixed(3)),
+      });
     }
   } catch (transactionLoopError) {
     if (operationId) {
@@ -1603,11 +1667,16 @@ export async function confirmScanDeduction({
       await supabase.from("transaction_operations").delete().eq("id", operationId);
     }
 
-    throw new Error("Nothing was deducted because all detected quantities were zero.");
+    throw new Error(
+      transactionType === "stock_in"
+        ? "Nothing was added because all detected quantities were zero."
+        : "Nothing was deducted because all detected quantities were zero."
+    );
   }
 
   return {
     deductionsApplied: transactionIds.length,
     transactionIds,
+    appliedLines: summarizeAppliedLines(appliedLines),
   };
 }

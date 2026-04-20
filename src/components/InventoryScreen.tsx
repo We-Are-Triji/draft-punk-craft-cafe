@@ -27,6 +27,7 @@ import {
 } from "@/lib/imageUpload";
 import { evaluateImageQualityForAi } from "@/lib/imageQuality";
 import type {
+  ConfirmDeductionLine,
   IngredientDeduction,
   InventoryItemRow,
   ScanDetectionResult,
@@ -115,6 +116,10 @@ function formatNumber(value: number): string {
   }
 
   return String(Number(value.toFixed(3)));
+}
+
+function formatStockInAppliedLine(line: ConfirmDeductionLine): string {
+  return `${line.item_name}: +${formatNumber(line.quantity)} ${line.unit}`;
 }
 
 function mergeAiScanProgress(
@@ -309,6 +314,7 @@ export function InventoryScreen({
   const [stockInMode, setStockInMode] = useState<StockInMode | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionSuccessLines, setActionSuccessLines] = useState<string[]>([]);
 
   const [manualIngredientKey, setManualIngredientKey] = useState("");
   const [manualQuantity, setManualQuantity] = useState("1");
@@ -709,6 +715,7 @@ export function InventoryScreen({
 
     setActionError(null);
     setActionSuccess(null);
+    setActionSuccessLines([]);
     if (aiProgressClearTimeoutRef.current !== null) {
       window.clearTimeout(aiProgressClearTimeoutRef.current);
       aiProgressClearTimeoutRef.current = null;
@@ -778,6 +785,7 @@ export function InventoryScreen({
 
     setActionError(null);
     setActionSuccess(null);
+    setActionSuccessLines([]);
     if (aiProgressClearTimeoutRef.current !== null) {
       window.clearTimeout(aiProgressClearTimeoutRef.current);
       aiProgressClearTimeoutRef.current = null;
@@ -936,6 +944,7 @@ export function InventoryScreen({
 
     setActionError(null);
     setActionSuccess(null);
+    setActionSuccessLines([]);
     setIsAiConfirming(true);
 
     try {
@@ -963,6 +972,9 @@ export function InventoryScreen({
       await refresh();
       setActionSuccess(
         `Stock-in confirmed. ${response.deductionsApplied} transaction line(s) were recorded.`
+      );
+      setActionSuccessLines(
+        response.appliedLines.map((line) => formatStockInAppliedLine(line))
       );
       setStockInMode(null);
       resetAiState();
@@ -1007,6 +1019,7 @@ export function InventoryScreen({
 
     setActionError(null);
     setActionSuccess(null);
+    setActionSuccessLines([]);
     setIsManualSubmitting(true);
 
     try {
@@ -1025,6 +1038,9 @@ export function InventoryScreen({
       await refresh();
       setActionSuccess(
         `Manual stock-in saved. ${response.deductionsApplied} transaction line(s) were recorded.`
+      );
+      setActionSuccessLines(
+        response.appliedLines.map((line) => formatStockInAppliedLine(line))
       );
       setStockInMode(null);
     } catch (manualError) {
@@ -1591,7 +1607,14 @@ export function InventoryScreen({
 
       {actionSuccess && (
         <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
-          {actionSuccess}
+          <p>{actionSuccess}</p>
+          {actionSuccessLines.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-emerald-700/90 dark:text-emerald-300/90">
+              {actionSuccessLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
