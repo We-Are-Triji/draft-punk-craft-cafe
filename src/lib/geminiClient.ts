@@ -489,6 +489,22 @@ function extractTextEntries(value: unknown): string[] {
     textEntries.push(record.arguments.trim());
   }
 
+  if (record.json && typeof record.json === "object") {
+    try {
+      textEntries.push(JSON.stringify(record.json));
+    } catch {
+      // Ignore non-serializable structured content.
+    }
+  }
+
+  if (record.value && typeof record.value === "object") {
+    try {
+      textEntries.push(JSON.stringify(record.value));
+    } catch {
+      // Ignore non-serializable structured content.
+    }
+  }
+
   if (typeof record.content === "string" && record.content.trim()) {
     textEntries.push(record.content.trim());
   }
@@ -499,6 +515,14 @@ function extractTextEntries(value: unknown): string[] {
 
   if (record.arguments !== undefined && record.arguments !== null) {
     textEntries.push(...extractTextEntries(record.arguments));
+  }
+
+  if (record.function !== undefined && record.function !== null) {
+    textEntries.push(...extractTextEntries(record.function));
+  }
+
+  if (record.tool_calls !== undefined && record.tool_calls !== null) {
+    textEntries.push(...extractTextEntries(record.tool_calls));
   }
 
   if (record.content !== undefined && record.content !== null) {
@@ -570,12 +594,12 @@ function extractOpenRouterResponseText(payload: unknown): string {
     } catch {
       if (getOpenRouterFinishReason(payload) === "length") {
         throw new Error(
-          "OpenRouter response was truncated before it returned JSON. Increase VITE_OPENROUTER_MAX_OUTPUT_TOKENS or use another fallback model."
+          "AI response was truncated before it returned JSON. Increase the output token budget or use another fallback model."
         );
       }
 
       throw new Error(
-        "OpenRouter returned reasoning output without final JSON. Please retry with another image or fallback model."
+        "AI provider returned reasoning output without final JSON. Please retry with another image or fallback model."
       );
     }
   }
@@ -583,10 +607,10 @@ function extractOpenRouterResponseText(payload: unknown): string {
   const refusalText = extractTextEntries(message?.refusal).join("\n").trim();
 
   if (refusalText) {
-    throw new Error(`OpenRouter refused to complete the request: ${refusalText}`);
+    throw new Error(`AI provider refused to complete the request: ${refusalText}`);
   }
 
-  throw new Error("OpenRouter returned an empty response.");
+  throw new Error("AI provider returned an empty response.");
 }
 
 function isOpenRouterResponseContentIssue(error: unknown): boolean {
@@ -612,21 +636,21 @@ function assertOpenRouterPayloadHasValidJson(payload: unknown): void {
   } catch {
     if (getOpenRouterFinishReason(payload) === "length") {
       throw new Error(
-        "OpenRouter response was truncated before it returned valid JSON. Increase VITE_OPENROUTER_MAX_OUTPUT_TOKENS or use another fallback model."
+        "AI response was truncated before it returned valid JSON. Increase the output token budget or use another fallback model."
       );
     }
 
-    throw new Error("OpenRouter returned malformed JSON output.");
+    throw new Error("AI provider returned malformed JSON output.");
   }
 }
 
-function assertOpenRouterApiKeyConfigured(): void {
-  if (appEnv.openRouterApiKey.trim()) {
+function assertAiProviderConfigured(): void {
+  if (appEnv.groqApiKey.trim()) {
     return;
   }
 
   throw new Error(
-    "Missing required environment variable: VITE_OPENROUTER_API_KEY. Create a local .env file based on .env.example."
+    "Missing required environment variable: VITE_GROQ_API_KEY. Create a local .env file based on .env.example."
   );
 }
 
@@ -636,21 +660,50 @@ function delay(milliseconds: number): Promise<void> {
   });
 }
 
-function getCandidateModels(): string[] {
+const defaultGroqFallbackModels = [
+  "meta-llama/llama-4-maverick-17b-128e-instruct",
+];
+
+const defaultOpenRouterQwenFallbackModels = [
+  "qwen/qwen3-next-80b-a3b-instruct:free",
+  "qwen/qwen3-coder:free",
+];
+
+function getGroqCandidateModels(): string[] {
   const modelSet = new Set<string>();
 
-  if (appEnv.openRouterModel.trim()) {
-    modelSet.add(appEnv.openRouterModel.trim());
+  if (appEnv.groqModel.trim()) {
+    modelSet.add(appEnv.groqModel.trim());
   }
 
-  for (const fallbackModel of appEnv.openRouterFallbackModels) {
+  for (const fallbackModel of appEnv.groqFallbackModels) {
     if (fallbackModel.trim()) {
       modelSet.add(fallbackModel.trim());
     }
   }
 
+  for (const fallbackModel of defaultGroqFallbackModels) {
+    modelSet.add(fallbackModel);
+  }
+
   if (modelSet.size === 0) {
-    modelSet.add("qwen/qwen2.5-vl-72b-instruct:free");
+    modelSet.add("meta-llama/llama-4-scout-17b-16e-instruct");
+  }
+
+  return [...modelSet];
+}
+
+function getOpenRouterQwenFallbackModels(): string[] {
+  const modelSet = new Set<string>();
+
+  for (const fallbackModel of appEnv.openRouterQwenFallbackModels) {
+    if (fallbackModel.trim()) {
+      modelSet.add(fallbackModel.trim());
+    }
+  }
+
+  for (const fallbackModel of defaultOpenRouterQwenFallbackModels) {
+    modelSet.add(fallbackModel);
   }
 
   return [...modelSet];
@@ -693,7 +746,7 @@ async function waitForRequestSlot(): Promise<void> {
     const now = Date.now();
     const waitMs = Math.max(
       0,
-      lastRequestStartAt + appEnv.openRouterMinRequestIntervalMs - now
+      lastRequestStartAt + appEnv.aiMinRequestIntervalMs - now
     );
 
     if (waitMs > 0) {
@@ -726,7 +779,7 @@ function toGeminiRequestErrorShape(
 
   return {
     status: 0,
-    message: error instanceof Error ? error.message : "Unknown OpenRouter error.",
+    message: error instanceof Error ? error.message : "Unknown AI provider error.",
     model,
   };
 }
@@ -738,7 +791,8 @@ function isQuotaOrRateLimitErrorMessage(message: string): boolean {
     normalizedMessage.includes("quota") ||
     normalizedMessage.includes("resource has been exhausted") ||
     normalizedMessage.includes("too many requests") ||
-    normalizedMessage.includes("rate limit")
+    normalizedMessage.includes("rate limit") ||
+    normalizedMessage.includes("provider returned error")
   );
 }
 
@@ -746,10 +800,12 @@ function isModelUnavailableError(error: GeminiRequestErrorShape): boolean {
   const normalizedMessage = error.message.trim().toLowerCase();
 
   return (
-    error.status === 404 &&
+    (error.status === 404 || error.status === 400) &&
     (normalizedMessage.includes("no endpoints found") ||
       normalizedMessage.includes("model not found") ||
-      normalizedMessage.includes("no route found"))
+      normalizedMessage.includes("no route found") ||
+      normalizedMessage.includes("not multimodal") ||
+      normalizedMessage.includes("unsupported modality"))
   );
 }
 
@@ -764,17 +820,6 @@ function isUnsupportedJsonResponseModeError(message: string): boolean {
   );
 }
 
-function isUnsupportedReasoningConfigError(message: string): boolean {
-  const normalized = message.trim().toLowerCase();
-
-  return (
-    normalized.includes("reasoning") &&
-    (normalized.includes("unsupported") ||
-      normalized.includes("unknown") ||
-      normalized.includes("invalid"))
-  );
-}
-
 async function requestGeminiResponsePayload(
   file: File,
   imageBase64: string,
@@ -783,25 +828,17 @@ async function requestGeminiResponsePayload(
   onProgress?: (event: AiModelProgressEvent) => void,
   attemptNumber = 1
 ): Promise<unknown> {
-  const endpoint = `${appEnv.openRouterApiBase.replace(/\/$/, "")}/chat/completions`;
+  const endpoint = `${appEnv.groqApiBase.replace(/\/$/, "")}/chat/completions`;
   const imageMimeType = file.type || "image/jpeg";
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${appEnv.openRouterApiKey}`,
+    Authorization: `Bearer ${appEnv.groqApiKey}`,
     "Content-Type": "application/json",
   };
-
-  if (appEnv.openRouterSiteUrl.trim()) {
-    headers["HTTP-Referer"] = appEnv.openRouterSiteUrl.trim();
-  }
-
-  if (appEnv.openRouterSiteName.trim()) {
-    headers["X-Title"] = appEnv.openRouterSiteName.trim();
-  }
 
   const baseRequestBody = {
     model,
     temperature: 0.1,
-    max_tokens: appEnv.openRouterMaxOutputTokens,
+    max_tokens: appEnv.aiMaxOutputTokens,
     messages: [
       {
         role: "user",
@@ -820,18 +857,9 @@ async function requestGeminiResponsePayload(
 
   const sendRequest = async (options: {
     forceJsonResponse: boolean;
-    includeReasoningControls: boolean;
   }): Promise<{ response: Response; payload: unknown }> => {
     const requestBody = {
       ...baseRequestBody,
-      ...(options.includeReasoningControls
-        ? {
-            reasoning: {
-              effort: "none",
-              exclude: true,
-            },
-          }
-        : {}),
       ...(options.forceJsonResponse
         ? {
             response_format: {
@@ -844,7 +872,7 @@ async function requestGeminiResponsePayload(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, appEnv.openRouterRequestTimeoutMs);
+    }, appEnv.aiRequestTimeoutMs);
 
     let response: Response;
 
@@ -865,8 +893,8 @@ async function requestGeminiResponsePayload(
       if (isAbortError) {
         throw {
           status: 408,
-          message: `OpenRouter request timed out after ${Math.ceil(
-            appEnv.openRouterRequestTimeoutMs / 1000
+          message: `Groq request timed out after ${Math.ceil(
+            appEnv.aiRequestTimeoutMs / 1000
           )}s.`,
           model,
         };
@@ -894,22 +922,20 @@ async function requestGeminiResponsePayload(
   await waitForRequestSlot();
   onProgress?.({
     step: "requesting",
-    model,
+    model: `groq:${model}`,
     attempt: attemptNumber,
   });
 
   geminiUsageState.total_network_attempts += 1;
   geminiUsageState.last_model = model;
 
-  let forceJsonResponse = appEnv.openRouterForceJsonResponse;
-  let includeReasoningControls = true;
+  let forceJsonResponse = appEnv.aiForceJsonResponse;
   let response: Response | null = null;
   let responsePayload: unknown = null;
 
-  for (let compatibilityAttempt = 0; compatibilityAttempt < 3; compatibilityAttempt += 1) {
+  for (let compatibilityAttempt = 0; compatibilityAttempt < 2; compatibilityAttempt += 1) {
     ({ response, payload: responsePayload } = await sendRequest({
       forceJsonResponse,
-      includeReasoningControls,
     }));
 
     if (response.ok) {
@@ -930,15 +956,6 @@ async function requestGeminiResponsePayload(
       shouldRetryWithCompatibilityFallback = true;
     }
 
-    if (
-      includeReasoningControls &&
-      response.status === 400 &&
-      isUnsupportedReasoningConfigError(compatibilityErrorMessage)
-    ) {
-      includeReasoningControls = false;
-      shouldRetryWithCompatibilityFallback = true;
-    }
-
     if (!shouldRetryWithCompatibilityFallback) {
       break;
     }
@@ -947,7 +964,7 @@ async function requestGeminiResponsePayload(
   if (!response) {
     throw {
       status: 0,
-      message: "OpenRouter request did not return a response.",
+      message: "Groq request did not return a response.",
       model,
     };
   }
@@ -955,7 +972,7 @@ async function requestGeminiResponsePayload(
   if (!response.ok) {
     const geminiError = getOpenRouterErrorMessage(responsePayload);
     const errorMessage =
-      geminiError ?? `OpenRouter API error for model ${model} (status ${response.status}).`;
+      geminiError ?? `Groq API error for model ${model} (status ${response.status}).`;
 
     throw {
       status: response.status,
@@ -967,7 +984,7 @@ async function requestGeminiResponsePayload(
   if (!responsePayload) {
     throw {
       status: 0,
-      message: "OpenRouter returned an unreadable response payload.",
+      message: "Groq returned an unreadable response payload.",
       model,
     };
   }
@@ -980,14 +997,165 @@ async function requestGeminiResponsePayload(
       message:
         validationError instanceof Error
           ? validationError.message
-          : "OpenRouter returned an invalid response payload.",
+          : "AI provider returned an invalid response payload.",
       model,
     };
   }
 
   onProgress?.({
     step: "response_received",
+    model: `groq:${model}`,
+    attempt: attemptNumber,
+  });
+
+  return responsePayload;
+}
+
+async function extractImageTextWithLocalOcr(file: File): Promise<string> {
+  try {
+    const { createWorker } = await import("tesseract.js");
+    const worker = await createWorker("eng");
+
+    try {
+      const ocrResult = await worker.recognize(file);
+      return toNonEmptyString(ocrResult?.data?.text, "").trim();
+    } finally {
+      try {
+        await worker.terminate();
+      } catch {
+        // Ignore worker teardown errors.
+      }
+    }
+  } catch {
+    return "";
+  }
+}
+
+function buildQwenTextFallbackPrompt(basePrompt: string, ocrText: string): string {
+  return [
+    "You are a fallback OCR-only assistant.",
+    "You DO NOT see the image directly. Use only OCR text below to complete the task.",
+    "If OCR text is noisy, infer conservatively and obey catalog constraints if present.",
+    "Return JSON only.",
+    "",
+    "TASK SPEC:",
+    basePrompt,
+    "",
+    "OCR TEXT:",
+    ocrText.slice(0, 5000),
+  ].join("\n");
+}
+
+async function requestOpenRouterQwenTextPayload(
+  model: string,
+  fallbackPrompt: string,
+  onProgress?: (event: AiModelProgressEvent) => void,
+  attemptNumber = 1
+): Promise<unknown> {
+  const endpoint = `${appEnv.openRouterApiBase.replace(/\/$/, "")}/chat/completions`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${appEnv.openRouterApiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  const baseRequestBody = {
     model,
+    temperature: 0.1,
+    max_tokens: appEnv.aiMaxOutputTokens,
+    messages: [
+      {
+        role: "user",
+        content: fallbackPrompt,
+      },
+    ],
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, appEnv.aiRequestTimeoutMs);
+
+  onProgress?.({
+    step: "requesting",
+    model: `openrouter-qwen:${model}`,
+    attempt: attemptNumber,
+  });
+
+  geminiUsageState.total_network_attempts += 1;
+  geminiUsageState.last_model = model;
+
+  let response: Response;
+
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ...baseRequestBody,
+        ...(appEnv.aiForceJsonResponse
+          ? {
+              response_format: {
+                type: "json_object",
+              },
+            }
+          : {}),
+      }),
+      signal: controller.signal,
+    });
+  } catch (fetchError) {
+    const isAbortError =
+      (typeof DOMException !== "undefined" &&
+        fetchError instanceof DOMException &&
+        fetchError.name === "AbortError") ||
+      (fetchError instanceof Error && fetchError.name === "AbortError");
+
+    if (isAbortError) {
+      throw {
+        status: 408,
+        message: `OpenRouter Qwen fallback timed out after ${Math.ceil(
+          appEnv.aiRequestTimeoutMs / 1000
+        )}s.`,
+        model,
+      };
+    }
+
+    throw fetchError;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  let responsePayload: unknown = null;
+
+  try {
+    responsePayload = await response.json();
+  } catch {
+    responsePayload = null;
+  }
+
+  if (!response.ok) {
+    const apiError = getOpenRouterErrorMessage(responsePayload);
+    throw {
+      status: response.status,
+      message:
+        apiError ??
+        `OpenRouter Qwen fallback failed for model ${model} (status ${response.status}).`,
+      model,
+    };
+  }
+
+  if (!responsePayload) {
+    throw {
+      status: 0,
+      message: "OpenRouter Qwen fallback returned an unreadable response payload.",
+      model,
+    };
+  }
+
+  assertOpenRouterPayloadHasValidJson(responsePayload);
+
+  onProgress?.({
+    step: "response_received",
+    model: `openrouter-qwen:${model}`,
     attempt: attemptNumber,
   });
 
@@ -1048,11 +1216,11 @@ function parseGeminiPayloadAsRecord(payload: unknown): Record<string, unknown> {
   } catch {
     if (getOpenRouterFinishReason(payload) === "length") {
       throw new Error(
-        "OpenRouter response was truncated before it returned valid JSON. Increase VITE_OPENROUTER_MAX_OUTPUT_TOKENS or use another fallback model."
+        "AI response was truncated before it returned valid JSON. Increase the output token budget or use another fallback model."
       );
     }
 
-    throw new Error("OpenRouter returned malformed JSON output.");
+    throw new Error("AI provider returned malformed JSON output.");
   }
 }
 
@@ -1063,8 +1231,8 @@ async function requestGeminiPayloadWithFallback(
 ): Promise<unknown> {
   geminiUsageState.total_requests += 1;
   const totalScanTimeoutMs = Math.max(
-    appEnv.openRouterRequestTimeoutMs + 5_000,
-    appEnv.openRouterTotalScanTimeoutMs
+    appEnv.aiRequestTimeoutMs + 5_000,
+    appEnv.aiTotalScanTimeoutMs
   );
   const deadlineAt = Date.now() + totalScanTimeoutMs;
 
@@ -1072,7 +1240,7 @@ async function requestGeminiPayloadWithFallback(
     step: "encoding",
   });
   const imageBase64 = arrayBufferToBase64(await file.arrayBuffer());
-  const candidateModels = getCandidateModels();
+  const candidateModels = getGroqCandidateModels();
   let availableModels = candidateModels.filter(
     (model) => (modelCooldownUntil.get(model) ?? 0) <= Date.now()
   );
@@ -1087,26 +1255,22 @@ async function requestGeminiPayloadWithFallback(
     availableModels = [...candidateModels];
   }
 
-  const maxModelsPerRequest = Math.max(1, appEnv.openRouterMaxModelsPerRequest);
-  const modelsToTry = availableModels.slice(0, maxModelsPerRequest);
-  let overflowModelIndex = maxModelsPerRequest;
-
-  const maxRetries = Math.max(0, appEnv.openRouterMaxRetries);
+  const modelsToTry = [...availableModels];
+  const maxRetries = Math.max(0, appEnv.aiMaxRetries);
   let lastError: GeminiRequestErrorShape | null = null;
-  let stoppedByRateLimit = false;
   let timedOut = false;
 
-  modelLoop:
+  groqModelLoop:
   for (const model of modelsToTry) {
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       if (Date.now() >= deadlineAt) {
         lastError = {
           status: 408,
-          model,
+          model: `groq:${model}`,
           message: `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s.`,
         };
         timedOut = true;
-        break modelLoop;
+        break groqModelLoop;
       }
 
       try {
@@ -1122,22 +1286,9 @@ async function requestGeminiPayloadWithFallback(
         geminiUsageState.last_error = null;
         return responsePayload;
       } catch (error) {
-        const normalizedError = toGeminiRequestErrorShape(error, model);
+        const normalizedError = toGeminiRequestErrorShape(error, `groq:${model}`);
         lastError = normalizedError;
         geminiUsageState.last_error = normalizedError.message;
-
-        if (isModelUnavailableError(normalizedError)) {
-          const nextFallbackModel = availableModels[overflowModelIndex];
-
-          if (nextFallbackModel && !modelsToTry.includes(nextFallbackModel)) {
-            modelsToTry.push(nextFallbackModel);
-            overflowModelIndex += 1;
-            onProgress?.({
-              step: "fallback_model",
-              model: nextFallbackModel,
-            });
-          }
-        }
 
         const isRateLimited = normalizedError.status === 429;
         const isTransientError =
@@ -1154,15 +1305,15 @@ async function requestGeminiPayloadWithFallback(
             timedOut = true;
             lastError = {
               status: 408,
-              model,
+              model: `groq:${model}`,
               message: `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s.`,
             };
-            break modelLoop;
+            break groqModelLoop;
           }
 
           onProgress?.({
             step: "retry_wait",
-            model,
+            model: `groq:${model}`,
             attempt: attempt + 1,
             retryDelayMs,
           });
@@ -1171,50 +1322,130 @@ async function requestGeminiPayloadWithFallback(
         }
 
         if (isRateLimited) {
-          modelCooldownUntil.set(model, Date.now() + appEnv.openRouterCooldownMs);
-          stoppedByRateLimit = true;
+          modelCooldownUntil.set(model, Date.now() + appEnv.aiCooldownMs);
         }
 
         break;
       }
     }
+  }
 
-    if (stoppedByRateLimit) {
-      break;
+  if (!timedOut && appEnv.openRouterApiKey.trim()) {
+    const qwenFallbackModels = getOpenRouterQwenFallbackModels();
+
+    if (qwenFallbackModels.length > 0) {
+      onProgress?.({
+        step: "fallback_model",
+        model: "openrouter-qwen-ocr",
+      });
+
+      const ocrText = await extractImageTextWithLocalOcr(file);
+
+      if (ocrText) {
+        const fallbackPrompt = buildQwenTextFallbackPrompt(promptText, ocrText);
+
+        for (const model of qwenFallbackModels) {
+          for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+            if (Date.now() >= deadlineAt) {
+              timedOut = true;
+              lastError = {
+                status: 408,
+                model: `openrouter-qwen:${model}`,
+                message: `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s.`,
+              };
+              break;
+            }
+
+            try {
+              const fallbackResponsePayload = await requestOpenRouterQwenTextPayload(
+                model,
+                fallbackPrompt,
+                onProgress,
+                attempt + 1
+              );
+
+              geminiUsageState.last_error = null;
+              return fallbackResponsePayload;
+            } catch (fallbackError) {
+              const normalizedFallbackError = toGeminiRequestErrorShape(
+                fallbackError,
+                `openrouter-qwen:${model}`
+              );
+              lastError = normalizedFallbackError;
+              geminiUsageState.last_error = normalizedFallbackError.message;
+
+              const canRetryFallback =
+                attempt < maxRetries &&
+                (normalizedFallbackError.status >= 500 ||
+                  normalizedFallbackError.status === 0 ||
+                  normalizedFallbackError.status === 408 ||
+                  normalizedFallbackError.status === 429);
+
+              if (canRetryFallback) {
+                geminiUsageState.total_retries += 1;
+                const retryDelayMs = Math.min(4_000, 600 * (attempt + 1));
+
+                if (Date.now() + retryDelayMs >= deadlineAt) {
+                  timedOut = true;
+                  lastError = {
+                    status: 408,
+                    model: `openrouter-qwen:${model}`,
+                    message: `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s.`,
+                  };
+                  break;
+                }
+
+                onProgress?.({
+                  step: "retry_wait",
+                  model: `openrouter-qwen:${model}`,
+                  attempt: attempt + 1,
+                  retryDelayMs,
+                });
+                await delay(retryDelayMs);
+                continue;
+              }
+
+              break;
+            }
+          }
+
+          if (timedOut) {
+            break;
+          }
+        }
+      }
     }
   }
 
   geminiUsageState.total_failures += 1;
 
-  if (timedOut || (lastError && lastError.status === 408)) {
+  if (timedOut || (lastError !== null && lastError.status === 408)) {
     throw new Error(
       `AI scan timed out after ${Math.ceil(totalScanTimeoutMs / 1000)}s. Please tap Retry Scan.`
     );
   }
 
-  if (
-    stoppedByRateLimit &&
-    lastError &&
-    isQuotaOrRateLimitErrorMessage(lastError.message)
-  ) {
+  if (lastError && isQuotaOrRateLimitErrorMessage(lastError.message)) {
     throw new Error(
-      "OpenRouter rate limit reached. Please wait about one minute before scanning again."
+      "Groq and Qwen fallback providers are currently rate-limited or unavailable. Please wait about one minute and tap Retry Scan."
     );
   }
 
   if (lastError) {
-    if (isModelUnavailableError(lastError)) {
+    if (lastError.model.startsWith("groq:") && isModelUnavailableError(lastError)) {
       throw new Error(
-        `OpenRouter model ${lastError.model} has no active endpoint right now. Set VITE_OPENROUTER_MODEL to another free vision model and keep at least one fallback model configured.`
+        `Groq model ${lastError.model.replace("groq:", "")} is unavailable for this request. Update VITE_GROQ_MODEL or VITE_GROQ_MODEL_FALLBACKS.`
       );
     }
 
     throw new Error(
-      `OpenRouter request failed (${lastError.status || "network"}) on model ${lastError.model}: ${lastError.message}`
+      `AI request failed (${lastError.status || "network"}) on ${lastError.model}: ${lastError.message}`
     );
   }
 
-  throw new Error("OpenRouter request failed: all models are unavailable.");
+  throw new Error(
+    "AI request failed: Groq primary and Qwen fallback models were unable to return a usable response."
+  );
 }
 
 function mapStockInIngredientsToCatalog(
@@ -1392,7 +1623,7 @@ export async function detectIngredientsWithGemini(
   onProgress?: (event: AiModelProgressEvent) => void,
   options: GeminiScanOptions = {}
 ): Promise<GeminiDetectionResult> {
-  assertOpenRouterApiKeyConfigured();
+  assertAiProviderConfigured();
 
   if (!options.skipQualityGate) {
     await assertImageQualityForAi(file);
@@ -1418,7 +1649,7 @@ export async function detectStockInWithCatalogGemini(
   onProgress?: (event: AiModelProgressEvent) => void,
   options: GeminiScanOptions = {}
 ): Promise<GeminiDetectionResult> {
-  assertOpenRouterApiKeyConfigured();
+  assertAiProviderConfigured();
 
   if (ingredientCatalog.length === 0) {
     throw new Error("Ingredient catalog is required for stock-in scanning.");
@@ -1493,7 +1724,7 @@ export async function classifyProductWithCatalogGemini(
   onProgress?: (event: AiModelProgressEvent) => void,
   options: GeminiScanOptions = {}
 ): Promise<GeminiProductClassificationResult> {
-  assertOpenRouterApiKeyConfigured();
+  assertAiProviderConfigured();
 
   if (productCatalog.length === 0) {
     throw new Error("Product catalog is required for stock-out scanning.");

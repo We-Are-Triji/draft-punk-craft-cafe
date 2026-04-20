@@ -6,35 +6,36 @@ Presentation-only ERP inventory prototype for BS Industrial Engineering capstone
 
 - React + Vite + TypeScript
 - Supabase (Database, API, Realtime, Storage)
-- OpenRouter API (vision models) for image-based detection
+- Groq API (primary vision inference)
+- OpenRouter Qwen free models (OCR-text fallback)
 
 ## Environment Setup
 
 1. Copy `.env.example` into `.env`.
-2. Fill in your Supabase and OpenRouter credentials.
+2. Fill in your Supabase, Groq, and optional OpenRouter credentials.
 
 Required variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_SUPABASE_STORAGE_BUCKET`
-- `VITE_OPENROUTER_API_KEY`
-- `VITE_OPENROUTER_MODEL`
+- `VITE_GROQ_API_KEY`
 
-Recommended free-tier model setup:
+Primary model setup (Groq):
 
-- `VITE_OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free`
-- `VITE_OPENROUTER_MODEL_FALLBACKS=google/gemma-3-12b-it:free,google/gemma-3-27b-it:free,google/gemma-4-26b-a4b-it:free`
-- `VITE_OPENROUTER_MAX_MODELS_PER_REQUEST=2`
-- `VITE_OPENROUTER_MAX_RETRIES=1`
-- `VITE_OPENROUTER_MAX_OUTPUT_TOKENS=320`
-- `VITE_OPENROUTER_FORCE_JSON_RESPONSE=true`
-- `VITE_OPENROUTER_MIN_REQUEST_INTERVAL_MS=350`
+- `VITE_GROQ_MODEL=meta-llama/llama-4-scout-17b-16e-instruct`
+- `VITE_GROQ_MODEL_FALLBACKS=meta-llama/llama-4-maverick-17b-128e-instruct`
+
+Optional fallback setup (OpenRouter Qwen free text models):
+
+- `VITE_OPENROUTER_API_KEY=...`
+- `VITE_OPENROUTER_QWEN_FALLBACK_MODELS=qwen/qwen3-next-80b-a3b-instruct:free,qwen/qwen3-coder:free`
 
 Notes:
 
-- The app supports fallback model lists, output-token caps, and cooldown/retry throttling in `.env.example`.
-- Model availability can change on OpenRouter; if a model is unavailable, swap to another currently listed `:free` vision model in your OpenRouter dashboard.
+- Groq is used first for both stock-in and stock-out image scans.
+- If Groq fails, the app runs local OCR and then tries OpenRouter Qwen free text fallback models.
+- OpenRouter currently exposes very limited Qwen free modalities; check live availability before changing fallback model IDs.
 
 ## Supabase Schema
 
