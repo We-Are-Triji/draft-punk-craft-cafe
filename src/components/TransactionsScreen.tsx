@@ -337,7 +337,6 @@ export function TransactionsScreen({
   const [aiScanResult, setAiScanResult] = useState<StockOutProductScanResult | null>(null);
   const [aiSelectedProductId, setAiSelectedProductId] = useState<string | null>(null);
   const [aiQuantityInput, setAiQuantityInput] = useState("1");
-  const [aiUnitPriceInput, setAiUnitPriceInput] = useState("");
   const [aiNotesInput, setAiNotesInput] = useState("");
   const [aiScanProgress, setAiScanProgress] = useState<AiScanProgressState | null>(null);
   const aiScanStartedAtRef = useRef<number | null>(null);
@@ -538,7 +537,6 @@ export function TransactionsScreen({
     setAiScanResult(null);
     setAiSelectedProductId(null);
     setAiQuantityInput("1");
-    setAiUnitPriceInput("");
     setAiNotesInput("");
     setIsAiDragging(false);
     setAiPreviewUrl((currentPreview) => {
@@ -678,7 +676,6 @@ export function TransactionsScreen({
     setAiScanResult(null);
     setAiSelectedProductId(null);
     setAiQuantityInput("1");
-    setAiUnitPriceInput("");
     setAiPreviewUrl((currentPreview) => {
       if (currentPreview) {
         URL.revokeObjectURL(currentPreview);
@@ -740,7 +737,6 @@ export function TransactionsScreen({
       setAiScanResult(null);
       setAiSelectedProductId(null);
       setAiQuantityInput("1");
-      setAiUnitPriceInput("");
       setAiPreviewUrl((currentPreview) => {
         if (currentPreview) {
           URL.revokeObjectURL(currentPreview);
@@ -949,18 +945,6 @@ export function TransactionsScreen({
       return;
     }
 
-    const aiUnitPriceValue = aiUnitPriceInput.trim();
-    const parsedAiUnitPrice =
-      aiUnitPriceValue.length === 0 ? null : Number(aiUnitPriceValue);
-
-    if (
-      parsedAiUnitPrice !== null &&
-      (!Number.isFinite(parsedAiUnitPrice) || parsedAiUnitPrice < 0)
-    ) {
-      setActionError("Unit price must be empty or a non-negative number.");
-      return;
-    }
-
     setActionSuccess(null);
     setActionError(null);
     setIsAiSubmitting(true);
@@ -969,7 +953,7 @@ export function TransactionsScreen({
       const createdOperationId = await createSaleTransaction({
         product_id: aiSelectedProduct.id,
         quantity: aiNormalizedQuantity,
-        unit_price: parsedAiUnitPrice,
+        unit_price: null,
         notes: aiNotesInput,
       });
 
@@ -1745,20 +1729,6 @@ export function TransactionsScreen({
                           </div>
                         </div>
 
-                        <div>
-                          <label className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest block mb-1">
-                            Unit Price (optional)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={aiUnitPriceInput}
-                            onChange={(event) => setAiUnitPriceInput(event.target.value)}
-                            placeholder="Example: 120"
-                            className="w-full md:w-60 px-3 py-2.5 border border-gray-200 dark:border-border rounded-xl text-sm outline-none"
-                          />
-                        </div>
                       </div>
 
                       <div className="rounded-xl border border-gray-100 dark:border-border overflow-hidden">

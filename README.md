@@ -45,6 +45,7 @@ Recent migrations:
 
 - `20260420135131_issue11_scan_images_bucket.sql` creates/configures the `scan-images` Storage bucket and required upload/read policies used by stock-in and stock-out image confirmations.
 - `20260420140740_issue12_inventory_pricing.sql` adds ingredient pricing columns (`price_amount`, `price_basis_quantity`, `price_basis_unit`) to `inventory_items`.
+- `20260420162000_seed_initial_ingredient_prices.sql` seeds initial ingredient prices from `Food-Ingredients-Prices.csv` using strict matching to existing recipe ingredients only.
 
 It creates:
 
