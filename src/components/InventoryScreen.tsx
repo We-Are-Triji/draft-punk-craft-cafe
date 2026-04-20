@@ -18,6 +18,7 @@ import {
   confirmScanDeduction,
   recordManualStockIn,
   scanImageForStockInCatalog,
+  upsertInventoryItemPricing,
   type AiScanProgressUpdate,
 } from "@/lib/inventoryService";
 import {
@@ -77,6 +78,9 @@ interface InventoryCatalogRow extends RecipeIngredientCatalogItem {
   inventory_id: string | null;
   current_stock: number;
   reorder_threshold: number;
+  price_amount: number;
+  price_basis_quantity: number;
+  price_basis_unit: string;
 }
 
 interface AiLineDraft {
@@ -120,6 +124,13 @@ function formatNumber(value: number): string {
 
 function formatStockInAppliedLine(line: ConfirmDeductionLine): string {
   return `${line.item_name}: +${formatNumber(line.quantity)} ${line.unit}`;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+  }).format(value);
 }
 
 function mergeAiScanProgress(
@@ -320,6 +331,11 @@ export function InventoryScreen({
   const [manualQuantity, setManualQuantity] = useState("1");
   const [manualNotes, setManualNotes] = useState("");
   const [isManualSubmitting, setIsManualSubmitting] = useState(false);
+  const [pricingEditorKey, setPricingEditorKey] = useState<string | null>(null);
+  const [priceAmountInput, setPriceAmountInput] = useState("0");
+  const [priceBasisQuantityInput, setPriceBasisQuantityInput] = useState("1");
+  const [priceBasisUnitInput, setPriceBasisUnitInput] = useState("");
+  const [isPricingSaving, setIsPricingSaving] = useState(false);
 
   const aiFileInputRef = useRef<HTMLInputElement | null>(null);
   const aiImagePreparingRef = useRef(false);
@@ -381,6 +397,10 @@ export function InventoryScreen({
         inventory_id: matchedInventoryItem?.id ?? null,
         current_stock: matchedInventoryItem?.current_stock ?? 0,
         reorder_threshold: matchedInventoryItem?.reorder_threshold ?? 10,
+        price_amount: matchedInventoryItem?.price_amount ?? 0,
+        price_basis_quantity: matchedInventoryItem?.price_basis_quantity ?? 1,
+        price_basis_unit:
+          matchedInventoryItem?.price_basis_unit?.trim() || recipeIngredient.unit,
       };
     });
   }, [items, recipeIngredientCatalog]);
@@ -545,6 +565,119 @@ export function InventoryScreen({
     setStockInMode("ai");
     setActionError(null);
     resetAiState();
+  };
+
+  const openPricingEditor = (item: InventoryCatalogRow) => {
+    if (isPricingSaving) {
+      return;
+    }
+
+    setActionError(null);
+    setActionSuccess(null);
+    setActionSuccessLines([]);
+    setPricingEditorKey(item.key);
+    setPriceAmountInput(formatNumber(item.price_amount));
+    setPriceBasisQuantityInput(formatNumber(item.price_basis_quantity));
+    setPriceBasisUnitInput(item.price_basis_unit || item.unit);
+  };
+
+  const closePricingEditor = () => {
+    if (isPricingSaving) {
+      return;
+    }
+
+    setPricingEditorKey(null);
+  };
+
+  const saveIngredientPricing = async (item: InventoryCatalogRow) => {
+    if (isPricingSaving) {
+      return;
+    }
+
+    const parsedPriceAmount = Number(priceAmountInput);
+    const parsedBasisQuantity = Number(priceBasisQuantityInput);
+    const normalizedBasisUnit = priceBasisUnitInput.trim() || item.unit;
+
+    if (!Number.isFinite(parsedPriceAmount) || parsedPriceAmount < 0) {
+      setActionError("Price amount must be a non-negative number.");
+      return;
+    }
+
+    if (!Number.isFinite(parsedBasisQuantity) || parsedBasisQuantity <= 0) {
+      setActionError("Price basis quantity must be greater than zero.");
+      return;
+    }
+
+    setActionError(null);
+    setActionSuccess(null);
+    setActionSuccessLines([]);
+    setIsPricingSaving(true);
+
+    const normalizedAmount = Number(parsedPriceAmount.toFixed(2));
+    const normalizedBasisQuantity = Number(parsedBasisQuantity.toFixed(3));
+
+    try {
+      await upsertInventoryItemPricing({
+        item_name: item.name,
+        category: item.category,
+        unit: item.unit,
+        price_amount: normalizedAmount,
+        price_basis_quantity: normalizedBasisQuantity,
+        price_basis_unit: normalizedBasisUnit,
+      });
+
+      await refresh();
+      setPricingEditorKey(null);
+      setActionSuccess(`Pricing updated for ${item.name}.`);
+      setActionSuccessLines([
+        `${item.name}: ${formatCurrency(normalizedAmount)} per ${formatNumber(normalizedBasisQuantity)} ${normalizedBasisUnit}`,
+      ]);
+    } catch (pricingError) {
+      setActionError(
+        pricingError instanceof Error
+          ? pricingError.message
+          : "Unable to save ingredient pricing."
+      );
+    } finally {
+      setIsPricingSaving(false);
+    }
+  };
+
+  const resetIngredientPricing = async (item: InventoryCatalogRow) => {
+    if (isPricingSaving) {
+      return;
+    }
+
+    setActionError(null);
+    setActionSuccess(null);
+    setActionSuccessLines([]);
+    setIsPricingSaving(true);
+
+    try {
+      await upsertInventoryItemPricing({
+        item_name: item.name,
+        category: item.category,
+        unit: item.unit,
+        price_amount: 0,
+        price_basis_quantity: 1,
+        price_basis_unit: item.unit,
+      });
+
+      await refresh();
+      setPricingEditorKey(null);
+      setActionSuccess(`Pricing reset for ${item.name}.`);
+      setActionSuccessLines([
+        `${item.name}: ${formatCurrency(0)} per 1 ${item.unit}`,
+      ]);
+    } catch (pricingError) {
+      setActionError(
+        pricingError instanceof Error
+          ? pricingError.message
+          : "Unable to reset ingredient pricing."
+      );
+    } finally {
+      setIsPricingSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -971,7 +1104,7 @@ export function InventoryScreen({
 
       await refresh();
       setActionSuccess(
-        `Stock-in confirmed. ${response.deductionsApplied} transaction line(s) were recorded.`
+        `Stock-in confirmed. ${response.deductionsApplied} ingredient line(s) were updated.`
       );
       setActionSuccessLines(
         response.appliedLines.map((line) => formatStockInAppliedLine(line))
@@ -1037,7 +1170,7 @@ export function InventoryScreen({
 
       await refresh();
       setActionSuccess(
-        `Manual stock-in saved. ${response.deductionsApplied} transaction line(s) were recorded.`
+        `Manual stock-in saved. ${response.deductionsApplied} ingredient line(s) were updated.`
       );
       setActionSuccessLines(
         response.appliedLines.map((line) => formatStockInAppliedLine(line))
@@ -1743,6 +1876,8 @@ export function InventoryScreen({
               <th className="pb-4 px-2">Linked Products</th>
               <th className="pb-4 px-2">Current Stock</th>
               <th className="pb-4 px-2">Reorder At</th>
+              <th className="pb-4 px-2">Price</th>
+              <th className="pb-4 px-2">Price Basis</th>
               <th className="pb-4 px-2">Status</th>
               <th className="pb-4 px-2 text-right">Action</th>
             </tr>
@@ -1750,7 +1885,7 @@ export function InventoryScreen({
           <tbody className="divide-y divide-gray-50 dark:divide-border/50">
             {loading && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
+                <td colSpan={9} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
                   Loading inventory...
                 </td>
               </tr>
@@ -1758,7 +1893,7 @@ export function InventoryScreen({
 
             {!loading && recipeIngredientCatalog.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
+                <td colSpan={9} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
                   No recipe ingredients found. Add ingredients in Recipes tab first.
                 </td>
               </tr>
@@ -1766,7 +1901,7 @@ export function InventoryScreen({
 
             {!loading && recipeIngredientCatalog.length > 0 && filteredIngredients.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
+                <td colSpan={9} className="py-8 text-center text-sm text-gray-500 dark:text-muted-foreground">
                   No ingredients found.
                 </td>
               </tr>
@@ -1775,6 +1910,7 @@ export function InventoryScreen({
             {!loading &&
               paginatedIngredients.map((item) => {
                 const status = getStatus(item);
+                const isPricingEditing = pricingEditorKey === item.key;
 
                 return (
                   <tr key={item.key} className="group hover:bg-gray-50 dark:hover:bg-muted/50">
@@ -1794,6 +1930,53 @@ export function InventoryScreen({
                     <td className="py-6 px-2 text-sm font-semibold text-gray-600 dark:text-muted-foreground">
                       {formatNumber(item.reorder_threshold)} {item.unit}
                     </td>
+                    <td className="py-6 px-2 text-sm font-semibold text-gray-700 dark:text-foreground">
+                      {isPricingEditing ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-500">PHP</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={priceAmountInput}
+                            onChange={(event) => setPriceAmountInput(event.target.value)}
+                            className="w-24 px-2 py-1.5 border border-gray-200 dark:border-border rounded-lg text-xs outline-none"
+                            disabled={isPricingSaving}
+                          />
+                        </div>
+                      ) : (
+                        formatCurrency(item.price_amount)
+                      )}
+                    </td>
+                    <td className="py-6 px-2 text-sm text-gray-600 dark:text-muted-foreground">
+                      {isPricingEditing ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0.001"
+                            step="0.001"
+                            value={priceBasisQuantityInput}
+                            onChange={(event) =>
+                              setPriceBasisQuantityInput(event.target.value)
+                            }
+                            className="w-20 px-2 py-1.5 border border-gray-200 dark:border-border rounded-lg text-xs outline-none"
+                            disabled={isPricingSaving}
+                          />
+                          <input
+                            type="text"
+                            value={priceBasisUnitInput}
+                            onChange={(event) =>
+                              setPriceBasisUnitInput(event.target.value)
+                            }
+                            className="w-20 px-2 py-1.5 border border-gray-200 dark:border-border rounded-lg text-xs outline-none"
+                            placeholder={item.unit}
+                            disabled={isPricingSaving}
+                          />
+                        </div>
+                      ) : (
+                        `per ${formatNumber(item.price_basis_quantity)} ${item.price_basis_unit}`
+                      )}
+                    </td>
                     <td className="py-6 px-2">
                       <span
                         className={`px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest ${status.color}`}
@@ -1802,12 +1985,51 @@ export function InventoryScreen({
                       </span>
                     </td>
                     <td className="py-6 px-2 text-right">
-                      <button
-                        onClick={() => openManualStockIn(item.key)}
-                        className="bg-gray-100 dark:bg-muted hover:bg-[#3E2723] hover:text-white text-gray-600 dark:text-muted-foreground px-3 py-2 rounded-xl text-xs font-bold transition-all"
-                      >
-                        Add Stock
-                      </button>
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => openManualStockIn(item.key)}
+                          className="bg-gray-100 dark:bg-muted hover:bg-[#3E2723] hover:text-white text-gray-600 dark:text-muted-foreground px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                          disabled={isPricingSaving}
+                        >
+                          Add Stock
+                        </button>
+                        {isPricingEditing ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => saveIngredientPricing(item)}
+                              className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                              disabled={isPricingSaving}
+                            >
+                              {isPricingSaving ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={closePricingEditor}
+                              className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                              disabled={isPricingSaving}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => resetIngredientPricing(item)}
+                              className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                              disabled={isPricingSaving}
+                            >
+                              Reset
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openPricingEditor(item)}
+                            className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                          >
+                            Edit Price
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

@@ -37,6 +37,9 @@ export interface InventoryItemRow {
   unit: string;
   current_stock: number;
   reorder_threshold: number;
+  price_amount: number;
+  price_basis_quantity: number;
+  price_basis_unit: string;
   created_at: string;
 }
 

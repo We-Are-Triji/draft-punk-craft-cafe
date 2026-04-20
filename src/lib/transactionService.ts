@@ -236,6 +236,7 @@ export async function listTransactionOperations(
     .select(
       "id, operation_type, product_id, product_name, quantity, unit_price, total_amount, notes, metadata, created_at"
     )
+    .in("operation_type", ["sale", "scan"])
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -288,6 +289,7 @@ export async function listTransactionOperations(
     )
     .is("operation_id", null)
     .eq("detected_by_ai", true)
+    .eq("transaction_type", "stock_out")
     .order("created_at", { ascending: false })
     .limit(1500);
 
@@ -310,6 +312,7 @@ export async function listTransactionOperations(
           "id, item_id, transaction_type, quantity, notes, created_at, image_url, inventory_items(name, unit)"
         )
         .eq("detected_by_ai", true)
+        .eq("transaction_type", "stock_out")
         .order("created_at", { ascending: false })
         .limit(1500);
 
@@ -369,7 +372,22 @@ export async function listTransactionOperations(
     lines: linesByOperation.get(operation.id) ?? [],
   }));
 
-  const allOperations = [...mappedOperations, ...legacyOperationMap.values()];
+  const allOperations = [
+    ...mappedOperations.filter((operation) => {
+      if (operation.operation_type === "sale") {
+        return true;
+      }
+
+      if (operation.operation_type !== "scan") {
+        return false;
+      }
+
+      return operation.lines.some(
+        (line) => line.transaction_type === "stock_out"
+      );
+    }),
+    ...legacyOperationMap.values(),
+  ];
 
   allOperations.sort(
     (left, right) =>

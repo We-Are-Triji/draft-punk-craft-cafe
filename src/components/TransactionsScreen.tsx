@@ -172,7 +172,7 @@ function getOperationLabel(operationType: OperationType): string {
   }
 
   if (operationType === "scan") {
-    return "Scan";
+    return "AI Scan Stock Out";
   }
 
   if (operationType === "manual_stock_in") {
@@ -1572,7 +1572,7 @@ export function TransactionsScreen({
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
                           <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
                             Detected Product
@@ -1595,14 +1595,6 @@ export function TransactionsScreen({
                           </p>
                           <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1">
                             {formatQuantity(aiScanResult.quantity_estimate)} {aiScanResult.unit}
-                          </p>
-                        </div>
-                        <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/50 px-3 py-2">
-                          <p className="text-[10px] text-gray-400 dark:text-muted-foreground font-bold uppercase tracking-widest">
-                            Source
-                          </p>
-                          <p className="text-sm font-semibold text-gray-800 dark:text-foreground mt-1 uppercase">
-                            {aiScanResult.source}
                           </p>
                         </div>
                       </div>
@@ -1845,10 +1837,7 @@ export function TransactionsScreen({
               >
                 <option value="all">All Types</option>
                 <option value="sale">Sale</option>
-                <option value="scan">Scan</option>
-                <option value="manual_stock_in">Manual Stock In</option>
-                <option value="manual_stock_out">Manual Stock Out</option>
-                <option value="adjustment">Adjustment</option>
+                <option value="scan">AI Scan Stock Out</option>
               </select>
 
               <div className="flex items-center gap-2">

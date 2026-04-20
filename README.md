@@ -41,7 +41,10 @@ Notes:
 
 Run all SQL files in `supabase/migrations/` in timestamp order inside the Supabase SQL editor.
 
-The latest migration (`20260420_issue11_scan_images_bucket.sql`) creates/configures the `scan-images` Storage bucket and required upload/read policies used by stock-in and stock-out image confirmations.
+Recent migrations:
+
+- `20260420135131_issue11_scan_images_bucket.sql` creates/configures the `scan-images` Storage bucket and required upload/read policies used by stock-in and stock-out image confirmations.
+- `20260420140740_issue12_inventory_pricing.sql` adds ingredient pricing columns (`price_amount`, `price_basis_quantity`, `price_basis_unit`) to `inventory_items`.
 
 It creates:
 
@@ -65,6 +68,8 @@ Important behavior:
 
 - No stock deduction happens during scan.
 - Deduction is posted only after explicit user confirmation.
+- Stock-in updates inventory levels only and is not recorded in transaction logs.
+- Transaction logs are limited to manual sale creation and successful AI-assisted stock-out confirmations.
 
 ## Local Run
 

@@ -28,6 +28,9 @@ function mapInventoryRow(row: Record<string, unknown>): InventoryItemRow {
     unit: String(row.unit),
     current_stock: toNumber(row.current_stock, 0),
     reorder_threshold: toNumber(row.reorder_threshold, 0),
+    price_amount: toNumber(row.price_amount, 0),
+    price_basis_quantity: toNumber(row.price_basis_quantity, 1),
+    price_basis_unit: String(row.price_basis_unit ?? row.unit ?? "unit"),
     created_at: String(row.created_at),
   };
 }
@@ -44,7 +47,7 @@ export function useInventory(): UseInventoryResult {
     const { data, error: queryError } = await supabase
       .from("inventory_items")
       .select(
-        "id, name, category, unit, current_stock, reorder_threshold, created_at"
+        "id, name, category, unit, current_stock, reorder_threshold, price_amount, price_basis_quantity, price_basis_unit, created_at"
       )
       .order("name", { ascending: true });
 

@@ -182,6 +182,18 @@ export interface InventoryItemMutationInput {
   unit: string;
   current_stock: number;
   reorder_threshold: number;
+  price_amount?: number;
+  price_basis_quantity?: number;
+  price_basis_unit?: string;
+}
+
+export interface InventoryPricingUpsertInput {
+  item_name: string;
+  category?: string;
+  unit: string;
+  price_amount: number;
+  price_basis_quantity: number;
+  price_basis_unit: string;
 }
 
 function reportScanProgress(
@@ -216,8 +228,8 @@ function toScanProgressFromModelEvent(
     case "requesting":
       return {
         percent: 62,
-        message: event.model
-          ? `Analyzing with ${event.model}${event.attempt ? ` (attempt ${event.attempt})` : ""}...`
+        message: event.attempt
+          ? `Analyzing image with AI (attempt ${event.attempt})...`
           : "Analyzing image with AI...",
       };
     case "retry_wait": {
@@ -231,9 +243,7 @@ function toScanProgressFromModelEvent(
     case "fallback_model":
       return {
         percent: 72,
-        message: event.model
-          ? `Switching to fallback model: ${event.model}`
-          : "Switching to fallback model...",
+        message: "Switching to fallback AI route...",
       };
     case "response_received":
       return {
@@ -545,6 +555,9 @@ function mapInventoryItemRow(row: Record<string, unknown>): InventoryItemRow {
     unit: String(row.unit),
     current_stock: toNumber(row.current_stock, 0),
     reorder_threshold: toNumber(row.reorder_threshold, 0),
+    price_amount: toNumber(row.price_amount, 0),
+    price_basis_quantity: toNumber(row.price_basis_quantity, 1),
+    price_basis_unit: String(row.price_basis_unit ?? row.unit ?? "unit"),
     created_at: String(row.created_at),
   };
 }
@@ -575,12 +588,28 @@ function normalizeInventoryMutationInput(
     throw new Error("Reorder threshold cannot be negative.");
   }
 
+  const normalizedPriceAmount = toNumber(input.price_amount, 0);
+  const normalizedPriceBasisQuantity = toNumber(input.price_basis_quantity, 1);
+  const normalizedPriceBasisUnit =
+    input.price_basis_unit?.trim() || unit;
+
+  if (normalizedPriceAmount < 0) {
+    throw new Error("Price amount cannot be negative.");
+  }
+
+  if (normalizedPriceBasisQuantity <= 0) {
+    throw new Error("Price basis quantity must be greater than zero.");
+  }
+
   return {
     name,
     category: input.category.trim() || "Uncategorized",
     unit,
     current_stock: currentStock,
     reorder_threshold: reorderThreshold,
+    price_amount: Number(normalizedPriceAmount.toFixed(2)),
+    price_basis_quantity: Number(normalizedPriceBasisQuantity.toFixed(3)),
+    price_basis_unit: normalizedPriceBasisUnit,
   };
 }
 
@@ -594,7 +623,7 @@ export async function createInventoryItem(
     .from("inventory_items")
     .insert(payload)
     .select(
-      "id, name, category, unit, current_stock, reorder_threshold, created_at"
+      "id, name, category, unit, current_stock, reorder_threshold, price_amount, price_basis_quantity, price_basis_unit, created_at"
     )
     .single();
 
@@ -623,7 +652,7 @@ export async function updateInventoryItem(
     .update(payload)
     .eq("id", normalizedItemId)
     .select(
-      "id, name, category, unit, current_stock, reorder_threshold, created_at"
+      "id, name, category, unit, current_stock, reorder_threshold, price_amount, price_basis_quantity, price_basis_unit, created_at"
     )
     .single();
 
@@ -650,6 +679,60 @@ export async function deleteInventoryItem(itemId: string): Promise<void> {
   if (error) {
     throw new Error(`Failed to delete ingredient: ${error.message}`);
   }
+}
+
+export async function upsertInventoryItemPricing(
+  input: InventoryPricingUpsertInput
+): Promise<InventoryItemRow> {
+  const itemName = input.item_name.trim();
+  const unit = input.unit.trim();
+
+  if (!itemName) {
+    throw new Error("Ingredient name is required.");
+  }
+
+  if (!unit) {
+    throw new Error("Ingredient unit is required.");
+  }
+
+  const priceAmount = toNumber(input.price_amount, 0);
+  const priceBasisQuantity = toNumber(input.price_basis_quantity, 1);
+  const priceBasisUnit = input.price_basis_unit.trim() || unit;
+
+  if (priceAmount < 0) {
+    throw new Error("Price amount cannot be negative.");
+  }
+
+  if (priceBasisQuantity <= 0) {
+    throw new Error("Price basis quantity must be greater than zero.");
+  }
+
+  const supabase = getSupabaseClient();
+  const inventoryItem = await getOrCreateInventoryItem({
+    item_name: itemName,
+    category: input.category?.trim() || "Recipe",
+    unit,
+    quantity: 1,
+  });
+
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .update({
+      price_amount: Number(priceAmount.toFixed(2)),
+      price_basis_quantity: Number(priceBasisQuantity.toFixed(3)),
+      price_basis_unit: priceBasisUnit,
+    })
+    .eq("id", inventoryItem.id)
+    .select(
+      "id, name, category, unit, current_stock, reorder_threshold, price_amount, price_basis_quantity, price_basis_unit, created_at"
+    )
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update ingredient pricing: ${error.message}`);
+  }
+
+  return mapInventoryItemRow(data as Record<string, unknown>);
 }
 
 function buildFallbackIngredients(
@@ -781,6 +864,9 @@ async function getOrCreateInventoryItem(
       unit: ingredient.unit,
       current_stock: 0,
       reorder_threshold: 10,
+      price_amount: 0,
+      price_basis_quantity: 1,
+      price_basis_unit: ingredient.unit,
     })
     .select("id, current_stock")
     .single();
@@ -818,16 +904,6 @@ function buildScanTransactionNotes(
   }
 
   return `${notes}\n${marker}`;
-}
-
-function buildManualStockInNotes(notes: string | undefined): string {
-  const trimmedNotes = notes?.trim();
-
-  if (!trimmedNotes) {
-    return "Manual stock-in confirmation";
-  }
-
-  return trimmedNotes;
 }
 
 function summarizeAppliedLines(
@@ -872,7 +948,6 @@ function summarizeAppliedLines(
 
 export async function recordManualStockIn({
   entries,
-  notes,
 }: {
   entries: ManualStockInEntry[];
   notes?: string;
@@ -894,129 +969,43 @@ export async function recordManualStockIn({
   }
 
   const supabase = getSupabaseClient();
-  const transactionIds: string[] = [];
   const appliedLines: ConfirmDeductionLine[] = [];
-  const operationNotes = buildManualStockInNotes(notes);
-  let operationId: string | null = null;
+  for (const entry of normalizedEntries) {
+    const inventoryItem = await getOrCreateInventoryItem({
+      item_name: entry.item_name,
+      category: entry.category,
+      quantity: entry.quantity,
+      unit: entry.unit,
+    });
 
-  const totalQuantity = normalizedEntries.reduce(
-    (sum, entry) => sum + entry.quantity,
-    0
-  );
+    const nextStockLevel = inventoryItem.current_stock + entry.quantity;
 
-  const { data: createdOperation, error: operationError } = await supabase
-    .from("transaction_operations")
-    .insert({
-      operation_type: "manual_stock_in",
-      quantity: Number(totalQuantity.toFixed(3)),
-      notes: operationNotes,
-      metadata: {
-        source: "inventory_manual",
-        entry_count: normalizedEntries.length,
-      },
-    })
-    .select("id")
-    .single();
+    const { error: updateError } = await supabase
+      .from("inventory_items")
+      .update({ current_stock: nextStockLevel })
+      .eq("id", inventoryItem.id);
 
-  if (operationError) {
-    if (!isMissingRelationError(operationError, "transaction_operations")) {
-      throw new Error(`Operation logging failed: ${operationError.message}`);
+    if (updateError) {
+      throw new Error(`Inventory update failed: ${updateError.message}`);
     }
-  } else {
-    operationId = String(createdOperation.id);
+
+    appliedLines.push({
+      item_name: entry.item_name,
+      unit: entry.unit,
+      quantity: Number(entry.quantity.toFixed(3)),
+    });
   }
 
-  try {
-    for (const entry of normalizedEntries) {
-      const inventoryItem = await getOrCreateInventoryItem({
-        item_name: entry.item_name,
-        category: entry.category,
-        quantity: entry.quantity,
-        unit: entry.unit,
-      });
+  const summarizedAppliedLines = summarizeAppliedLines(appliedLines);
 
-      const nextStockLevel = inventoryItem.current_stock + entry.quantity;
-
-      const { error: updateError } = await supabase
-        .from("inventory_items")
-        .update({ current_stock: nextStockLevel })
-        .eq("id", inventoryItem.id);
-
-      if (updateError) {
-        throw new Error(`Inventory update failed: ${updateError.message}`);
-      }
-
-      const transactionPayload: Record<string, unknown> = {
-        item_id: inventoryItem.id,
-        transaction_type: "stock_in",
-        quantity: entry.quantity,
-        image_url: null,
-        detected_by_ai: false,
-        notes: operationNotes,
-      };
-
-      if (operationId) {
-        transactionPayload.operation_id = operationId;
-      }
-
-      const { data: createdTransaction, error: transactionError } = await supabase
-        .from("stock_transactions")
-        .insert(transactionPayload)
-        .select("id")
-        .single();
-
-      if (transactionError) {
-        if (operationId && isMissingColumnError(transactionError, "operation_id")) {
-          const fallbackPayload: Record<string, unknown> = {
-            item_id: inventoryItem.id,
-            transaction_type: "stock_in",
-            quantity: entry.quantity,
-            image_url: null,
-            detected_by_ai: false,
-            notes: operationNotes,
-          };
-
-          const { data: fallbackTransaction, error: fallbackError } = await supabase
-            .from("stock_transactions")
-            .insert(fallbackPayload)
-            .select("id")
-            .single();
-
-          if (fallbackError) {
-            throw new Error(`Transaction logging failed: ${fallbackError.message}`);
-          }
-
-          transactionIds.push(String(fallbackTransaction.id));
-          appliedLines.push({
-            item_name: entry.item_name,
-            unit: entry.unit,
-            quantity: Number(entry.quantity.toFixed(3)),
-          });
-          continue;
-        }
-
-        throw new Error(`Transaction logging failed: ${transactionError.message}`);
-      }
-
-      transactionIds.push(String(createdTransaction.id));
-      appliedLines.push({
-        item_name: entry.item_name,
-        unit: entry.unit,
-        quantity: Number(entry.quantity.toFixed(3)),
-      });
-    }
-  } catch (entryError) {
-    if (operationId) {
-      await supabase.from("transaction_operations").delete().eq("id", operationId);
-    }
-
-    throw entryError;
+  if (summarizedAppliedLines.length === 0) {
+    throw new Error("Nothing was added because all stock-in quantities were zero.");
   }
 
   return {
-    deductionsApplied: transactionIds.length,
-    transactionIds,
-    appliedLines: summarizeAppliedLines(appliedLines),
+    deductionsApplied: summarizedAppliedLines.length,
+    transactionIds: [],
+    appliedLines: summarizedAppliedLines,
   };
 }
 
@@ -1543,35 +1532,40 @@ export async function confirmScanDeduction({
   }
 
   const supabase = getSupabaseClient();
+  const shouldLogTransaction = transactionType === "stock_out";
   const transactionIds: string[] = [];
   const appliedLines: ConfirmDeductionLine[] = [];
-  const imageUrl = await uploadImageForTransaction(imageFile, detection.image_hash);
+  const imageUrl = shouldLogTransaction
+    ? await uploadImageForTransaction(imageFile, detection.image_hash)
+    : null;
   const operationNotes = buildScanTransactionNotes(detection.item_name, notes);
   let operationId: string | null = null;
 
-  const { data: createdOperation, error: operationError } = await supabase
-    .from("transaction_operations")
-    .insert({
-      operation_type: "scan",
-      product_name: detection.item_name,
-      quantity: Math.max(1, toNumber(detection.quantity_estimate, 1)),
-      notes: operationNotes,
-      metadata: {
-        source: detection.source,
-        image_hash: detection.image_hash,
-        confidence: detection.confidence,
-        category: detection.category,
-      },
-    })
-    .select("id")
-    .single();
+  if (shouldLogTransaction) {
+    const { data: createdOperation, error: operationError } = await supabase
+      .from("transaction_operations")
+      .insert({
+        operation_type: "scan",
+        product_name: detection.item_name,
+        quantity: Math.max(1, toNumber(detection.quantity_estimate, 1)),
+        notes: operationNotes,
+        metadata: {
+          source: detection.source,
+          image_hash: detection.image_hash,
+          confidence: detection.confidence,
+          category: detection.category,
+        },
+      })
+      .select("id")
+      .single();
 
-  if (operationError) {
-    if (!isMissingRelationError(operationError, "transaction_operations")) {
-      throw new Error(`Operation logging failed: ${operationError.message}`);
+    if (operationError) {
+      if (!isMissingRelationError(operationError, "transaction_operations")) {
+        throw new Error(`Operation logging failed: ${operationError.message}`);
+      }
+    } else {
+      operationId = String(createdOperation.id);
     }
-  } else {
-    operationId = String(createdOperation.id);
   }
 
   try {
@@ -1593,6 +1587,16 @@ export async function confirmScanDeduction({
 
       if (updateError) {
         throw new Error(`Inventory update failed: ${updateError.message}`);
+      }
+
+      appliedLines.push({
+        item_name: ingredient.item_name,
+        unit: ingredient.unit,
+        quantity: Number(normalizedQuantity.toFixed(3)),
+      });
+
+      if (!shouldLogTransaction) {
+        continue;
       }
 
       const transactionPayload: Record<string, unknown> = {
@@ -1636,11 +1640,6 @@ export async function confirmScanDeduction({
           }
 
           transactionIds.push(String(fallbackTransaction.id));
-          appliedLines.push({
-            item_name: ingredient.item_name,
-            unit: ingredient.unit,
-            quantity: Number(normalizedQuantity.toFixed(3)),
-          });
           continue;
         }
 
@@ -1648,11 +1647,6 @@ export async function confirmScanDeduction({
       }
 
       transactionIds.push(String(createdTransaction.id));
-      appliedLines.push({
-        item_name: ingredient.item_name,
-        unit: ingredient.unit,
-        quantity: Number(normalizedQuantity.toFixed(3)),
-      });
     }
   } catch (transactionLoopError) {
     if (operationId) {
@@ -1662,7 +1656,9 @@ export async function confirmScanDeduction({
     throw transactionLoopError;
   }
 
-  if (transactionIds.length === 0) {
+  const summarizedAppliedLines = summarizeAppliedLines(appliedLines);
+
+  if (summarizedAppliedLines.length === 0) {
     if (operationId) {
       await supabase.from("transaction_operations").delete().eq("id", operationId);
     }
@@ -1675,8 +1671,8 @@ export async function confirmScanDeduction({
   }
 
   return {
-    deductionsApplied: transactionIds.length,
+    deductionsApplied: summarizedAppliedLines.length,
     transactionIds,
-    appliedLines: summarizeAppliedLines(appliedLines),
+    appliedLines: summarizedAppliedLines,
   };
 }
