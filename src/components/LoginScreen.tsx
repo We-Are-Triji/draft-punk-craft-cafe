@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Coffee, Eye, EyeOff } from "lucide-react";
 import heroImg from "@/assets/draft-punk-craft-cafe.jpg";
-import { getSupabaseClient } from "@/lib/supabaseClient";
+import {
+  getRememberSessionPreference,
+  getSupabaseClient,
+  setRememberSessionPreference,
+} from "@/lib/supabaseClient";
+
+const REMEMBERED_EMAIL_STORAGE_KEY = "draftpunk.rememberedEmail";
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -13,8 +19,21 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(getRememberSessionPreference);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const rememberedEmail = window.localStorage.getItem(REMEMBERED_EMAIL_STORAGE_KEY);
+
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+    }
+  }, []);
 
   const handleEmailPasswordLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -30,6 +49,16 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     setErrorMessage(null);
 
     try {
+      setRememberSessionPreference(rememberMe);
+
+      if (typeof window !== "undefined") {
+        if (rememberMe) {
+          window.localStorage.setItem(REMEMBERED_EMAIL_STORAGE_KEY, normalizedEmail);
+        } else {
+          window.localStorage.removeItem(REMEMBERED_EMAIL_STORAGE_KEY);
+        }
+      }
+
       const supabase = getSupabaseClient();
       const { error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
@@ -38,6 +67,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
       if (error) {
         setErrorMessage(error.message);
+        setPassword("");
+        setShowPassword(false);
         return;
       }
 
@@ -48,6 +79,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           ? error.message
           : "Unable to login right now. Please try again."
       );
+      setPassword("");
+      setShowPassword(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -122,6 +155,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               <label className="flex items-center gap-2 cursor-pointer text-sm">
                 <input
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
                   className="rounded border-border accent-amber-800"
                 />
                 <span className="text-muted-foreground">Remember Me</span>

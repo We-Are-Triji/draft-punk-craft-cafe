@@ -48,14 +48,14 @@ export function LowStockAlert({ data, loading }: LowStockAlertProps) {
         </div>
         <div className="flex-1">
           <CardTitle className="text-sm font-semibold">Low Stock</CardTitle>
-          <p className="text-[11px] text-muted-foreground">Needs restock attention</p>
+          <p className="text-[11px] text-muted-foreground">Showing up to 5 ingredients that need restock attention</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="destructive" className="text-[10px] h-5">
             {criticalCount} critical
           </Badge>
           <Badge variant="outline" className="text-[10px] h-5">
-            {lowStockItems.length} total
+            Showing {visibleItems.length} of {lowStockItems.length}
           </Badge>
         </div>
       </CardHeader>

@@ -110,8 +110,8 @@ function normalizeValue(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function toIngredientKey(name: string, unit: string): string {
-  return `${normalizeValue(name)}|${normalizeValue(unit)}`;
+function toIngredientKey(name: string): string {
+  return normalizeValue(name);
 }
 
 function formatNumber(value: number): string {
@@ -215,10 +215,14 @@ function buildRecipeIngredientCatalog(
       }
 
       const trimmedUnit = ingredient.unit.trim() || "pcs";
-      const key = toIngredientKey(trimmedName, trimmedUnit);
+      const key = toIngredientKey(trimmedName);
       const existing = ingredientMap.get(key);
 
       if (existing) {
+        if (existing.unit.toLowerCase() === "pcs" && trimmedUnit.toLowerCase() !== "pcs") {
+          existing.unit = trimmedUnit;
+        }
+
         if (!existing.linked_products.includes(product.name)) {
           existing.linked_products.push(product.name);
           existing.linked_products.sort((left, right) =>
@@ -242,11 +246,7 @@ function buildRecipeIngredientCatalog(
   return [...ingredientMap.values()].sort((left, right) => {
     const byName = left.name.localeCompare(right.name);
 
-    if (byName !== 0) {
-      return byName;
-    }
-
-    return left.unit.localeCompare(right.unit);
+    return byName;
   });
 }
 
@@ -373,16 +373,10 @@ export function InventoryScreen({
   }, [recipeIngredientCatalog]);
 
   const mergedIngredients = useMemo<InventoryCatalogRow[]>(() => {
-    const inventoryByExact = new Map<string, InventoryItemRow>();
     const inventoryByName = new Map<string, InventoryItemRow>();
 
     for (const inventoryItem of items) {
-      const exactKey = toIngredientKey(inventoryItem.name, inventoryItem.unit);
       const nameKey = normalizeValue(inventoryItem.name);
-
-      if (!inventoryByExact.has(exactKey)) {
-        inventoryByExact.set(exactKey, inventoryItem);
-      }
 
       if (!inventoryByName.has(nameKey)) {
         inventoryByName.set(nameKey, inventoryItem);
@@ -391,7 +385,6 @@ export function InventoryScreen({
 
     return recipeIngredientCatalog.map((recipeIngredient) => {
       const matchedInventoryItem =
-        inventoryByExact.get(recipeIngredient.key) ??
         inventoryByName.get(normalizeValue(recipeIngredient.name)) ??
         null;
 
@@ -1409,7 +1402,11 @@ export function InventoryScreen({
                 </div>
               ) : null}
 
-              {recipeIngredientCatalog.length === 0 ? (
+              {productsLoading ? (
+                <div className="rounded-xl border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/40 px-4 py-3 text-sm text-gray-600 dark:text-muted-foreground">
+                  Loading recipe ingredients...
+                </div>
+              ) : recipeIngredientCatalog.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                   No recipe ingredients are configured yet. Add ingredients on Recipes first.
                 </div>

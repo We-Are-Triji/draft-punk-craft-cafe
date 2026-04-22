@@ -1416,7 +1416,11 @@ export function TransactionsScreen({
                 </div>
               ) : null}
 
-              {aiProductCatalog.length === 0 ? (
+              {productsLoading ? (
+                <div className="rounded-xl border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/40 px-4 py-3 text-sm text-gray-600 dark:text-muted-foreground">
+                  Loading products and recipes...
+                </div>
+              ) : aiProductCatalog.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
                   No active products are configured. Add products and recipes first.
                 </div>

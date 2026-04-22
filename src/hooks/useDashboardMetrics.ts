@@ -274,7 +274,7 @@ export function useDashboardMetrics(): UseDashboardMetricsResult {
       top_transaction_product_name: topProductWeek?.name ?? null,
       top_transaction_product_count: topProductWeek?.transactions ?? 0,
       top_transaction_products: topTransactionsWeek,
-      stock_levels: stockLevels.slice(0, 8),
+      stock_levels: stockLevels,
       lowest_stock_item:
         stockLevels.length > 0
           ? {

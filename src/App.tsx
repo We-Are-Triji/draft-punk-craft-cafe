@@ -12,6 +12,7 @@ import { useTheme } from "@/hooks/useTheme";
 function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [pendingStockInAiRequestId, setPendingStockInAiRequestId] = useState<string | null>(null);
   const [pendingStockOutAiRequestId, setPendingStockOutAiRequestId] = useState<string | null>(null);
@@ -59,8 +60,32 @@ function App() {
   }
 
   const handleLogout = async () => {
+    if (isSigningOut) {
+      return;
+    }
+
+    setIsSigningOut(true);
     const supabase = getSupabaseClient();
-    await supabase.auth.signOut();
+
+    try {
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "global" });
+
+      if (signOutError) {
+        throw signOutError;
+      }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      setLoggedIn(Boolean(sessionData.session));
+    } catch (error) {
+      console.error("Failed to sign out:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const createShortcutRequestId = (): string =>
@@ -79,7 +104,14 @@ function App() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onLogout={handleLogout}
+        isLoggingOut={isSigningOut}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
       <main className="flex-1 p-6 overflow-auto">
         {activeTab === "dashboard" && (
           <DashboardScreen

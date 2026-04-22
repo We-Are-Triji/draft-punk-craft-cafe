@@ -65,18 +65,57 @@ export async function openCameraStreamForStillPhoto(): Promise<MediaStream> {
     );
   }
 
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: {
-          ideal: "environment",
-        },
+  const constraintAttempts: MediaTrackConstraints[] = [
+    {
+      facingMode: {
+        exact: "environment",
       },
-    });
-  } catch (cameraError) {
-    throw toCameraPermissionError(cameraError);
+    },
+    {
+      facingMode: {
+        ideal: "environment",
+      },
+    },
+    {
+      facingMode: "environment",
+    },
+    {
+      width: {
+        ideal: 1920,
+      },
+      height: {
+        ideal: 1080,
+      },
+    },
+  ];
+
+  let lastError: unknown = null;
+
+  for (const videoConstraints of constraintAttempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: videoConstraints,
+      });
+    } catch (cameraError) {
+      lastError = cameraError;
+
+      if (cameraError instanceof DOMException) {
+        if (cameraError.name === "NotAllowedError" || cameraError.name === "SecurityError") {
+          throw toCameraPermissionError(cameraError);
+        }
+
+        if (
+          cameraError.name === "NotFoundError" ||
+          cameraError.name === "OverconstrainedError"
+        ) {
+          continue;
+        }
+      }
+    }
   }
+
+  throw toCameraPermissionError(lastError);
 }
 
 export async function requestCameraPermissionForStillPhoto(): Promise<void> {

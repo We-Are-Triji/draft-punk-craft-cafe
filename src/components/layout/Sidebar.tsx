@@ -8,6 +8,7 @@ import {
   Receipt,
   HandPlatter,
   LogOut,
+  LoaderCircle,
   Sun,
   Moon,
 } from "lucide-react";
@@ -25,12 +26,20 @@ const navItems = [
 interface SidebarProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
-  onLogout: () => void;
+  onLogout: () => Promise<void> | void;
+  isLoggingOut?: boolean;
   theme: "light" | "dark";
   onToggleTheme: () => void;
 }
 
-export function Sidebar({ activeTab, onTabChange, onLogout, theme, onToggleTheme }: SidebarProps) {
+export function Sidebar({
+  activeTab,
+  onTabChange,
+  onLogout,
+  isLoggingOut = false,
+  theme,
+  onToggleTheme,
+}: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -146,15 +155,21 @@ export function Sidebar({ activeTab, onTabChange, onLogout, theme, onToggleTheme
       <div className="p-2 border-t border-border">
         <button
           onClick={onLogout}
+          disabled={isLoggingOut}
           className={cn(
             "flex items-center w-full rounded-xl text-xs font-medium transition-all duration-200",
             "text-muted-foreground hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20",
+            isLoggingOut ? "opacity-70 cursor-not-allowed" : "",
             collapsed ? "justify-center p-2.5 mx-auto w-11 h-11" : "gap-2.5 px-3 py-2.5"
           )}
           title={collapsed ? "Sign out" : undefined}
         >
-          <LogOut className="w-4 h-4 shrink-0" />
-          {!collapsed && <span>Sign out</span>}
+          {isLoggingOut ? (
+            <LoaderCircle className="w-4 h-4 shrink-0 animate-spin" />
+          ) : (
+            <LogOut className="w-4 h-4 shrink-0" />
+          )}
+          {!collapsed && <span>{isLoggingOut ? "Signing out..." : "Sign out"}</span>}
         </button>
       </div>
     </aside>

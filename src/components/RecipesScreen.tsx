@@ -895,13 +895,9 @@ export const RecipesScreen = () => {
                             type="number"
                             step="0.01"
                             min="0"
-                            value={ingredient.price}
+                            value={getIngredientPrice(ingredient.id, ingredient.name)}
                             onChange={(event) =>
-                              handleChangeIngredient(
-                                ingredient.id,
-                                'price',
-                                event.target.value
-                              )
+                              handleChangePrice(ingredient.id, event.target.value)
                             }
                             className="w-24 p-2 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl font-bold text-center outline-none focus:ring-1 focus:ring-[#3E2723]"
                           />
