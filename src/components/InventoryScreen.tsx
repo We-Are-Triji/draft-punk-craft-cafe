@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
-  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Filter,
   LoaderCircle,
-  PlusCircle,
   Search,
   Sparkles,
   UploadCloud,
@@ -24,10 +22,10 @@ import {
 import {
   isHeicOrHeifFile,
   normalizeImageForAiScan,
-  requestCameraPermissionForStillPhoto,
   waitForNextPaint,
 } from "@/lib/imageUpload";
 import { evaluateImageQualityForAi } from "@/lib/imageQuality";
+import { CameraCaptureDialog } from "@/components/ui/CameraCaptureDialog";
 import type {
   ConfirmDeductionLine,
   IngredientDeduction,
@@ -340,7 +338,6 @@ export function InventoryScreen({
   const [isPricingSaving, setIsPricingSaving] = useState(false);
 
   const aiUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const aiCameraInputRef = useRef<HTMLInputElement | null>(null);
   const aiImagePreparingRef = useRef(false);
   const aiProgressClearTimeoutRef = useRef<number | null>(null);
   const aiImagePreparationClearTimeoutRef = useRef<number | null>(null);
@@ -360,6 +357,7 @@ export function InventoryScreen({
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [isAiDisputing, setIsAiDisputing] = useState(false);
   const [isAiConfirming, setIsAiConfirming] = useState(false);
+  const [isAiCameraDialogOpen, setIsAiCameraDialogOpen] = useState(false);
 
   const loading = inventoryLoading || productsLoading;
 
@@ -501,15 +499,6 @@ export function InventoryScreen({
     [filteredIngredients, page]
   );
 
-  const lowStockItems = useMemo(
-    () =>
-      [...mergedIngredients]
-        .filter((item) => getStatus(item).level !== "healthy")
-        .sort((left, right) => left.current_stock - right.current_stock)
-        .slice(0, 5),
-    [mergedIngredients]
-  );
-
   const selectedManualIngredient =
     catalogByKey.get(manualIngredientKey) ?? null;
 
@@ -524,6 +513,7 @@ export function InventoryScreen({
     setAiScanElapsedMs(0);
     setAiImagePreparation(null);
     setAiImageInputChoice("none");
+    setIsAiCameraDialogOpen(false);
     setAiScanProgress(null);
     setAiImage(null);
     setAiScanResult(null);
@@ -583,24 +573,14 @@ export function InventoryScreen({
     aiUploadInputRef.current?.click();
   };
 
-  const openAiCameraCapture = async () => {
+  const openAiCameraCapture = () => {
     if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming) {
       return;
     }
 
     setActionError(null);
-
-    try {
-      await requestCameraPermissionForStillPhoto();
-      setAiImageInputChoice("camera");
-      aiCameraInputRef.current?.click();
-    } catch (cameraError) {
-      setActionError(
-        cameraError instanceof Error
-          ? cameraError.message
-          : "Camera permission is required to take a photo."
-      );
-    }
+    setAiImageInputChoice("camera");
+    setIsAiCameraDialogOpen(true);
   };
 
   const openPricingEditor = (item: InventoryCatalogRow) => {
@@ -1389,6 +1369,7 @@ export function InventoryScreen({
       )}
 
       {stockInMode === "ai" && (
+        <>
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-card rounded-2xl w-full max-w-5xl shadow-xl max-h-[92vh] overflow-hidden flex flex-col">
             <div className="p-5 border-b border-gray-100 dark:border-border flex items-center justify-between">
@@ -1468,24 +1449,6 @@ export function InventoryScreen({
                       ref={aiUploadInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
-                      className="hidden"
-                      disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming}
-                      onChange={(event) => {
-                        const nextFile = event.currentTarget.files?.[0];
-
-                        if (nextFile) {
-                          void setAiImageFile(nextFile);
-                        }
-
-                        event.currentTarget.value = "";
-                      }}
-                    />
-
-                    <input
-                      ref={aiCameraInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
                       className="hidden"
                       disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming}
                       onChange={(event) => {
@@ -1579,9 +1542,7 @@ export function InventoryScreen({
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        void openAiCameraCapture();
-                      }}
+                      onClick={openAiCameraCapture}
                       className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={
                         isAiImagePreparing ||
@@ -1838,6 +1799,17 @@ export function InventoryScreen({
             </div>
           </div>
         </div>
+
+        <CameraCaptureDialog
+          isOpen={isAiCameraDialogOpen}
+          onClose={() => setIsAiCameraDialogOpen(false)}
+          onCapture={setAiImageFile}
+          onError={(message) => setActionError(message)}
+          disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiConfirming}
+          title="Use Device Camera"
+          description="Frame the ingredient item, then capture a photo for AI scan."
+        />
+        </>
       )}
 
       {combinedError && (
@@ -1858,66 +1830,6 @@ export function InventoryScreen({
           )}
         </div>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-        <div className="bg-white dark:bg-card p-6 rounded-2xl border border-gray-100 dark:border-border shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="text-red-500" size={18} />
-            <h3 className="font-bold text-gray-800 dark:text-foreground">Low Stock Alerts</h3>
-          </div>
-
-          <div className="space-y-2">
-            {loading && (
-              <p className="text-sm text-gray-500 dark:text-muted-foreground">Loading inventory alerts...</p>
-            )}
-
-            {!loading && recipeIngredientCatalog.length === 0 && (
-              <p className="text-sm text-gray-500 dark:text-muted-foreground">
-                No recipe ingredients found. Add ingredients in Recipes first.
-              </p>
-            )}
-
-            {!loading && recipeIngredientCatalog.length > 0 && lowStockItems.length === 0 && (
-              <p className="text-sm text-gray-500 dark:text-muted-foreground">All recipe ingredients are healthy.</p>
-            )}
-
-            {!loading &&
-              lowStockItems.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex justify-between items-center bg-red-50 dark:bg-red-950/20 p-4 rounded-2xl border border-red-100/50 dark:border-red-900/40"
-                >
-                  <div className="flex flex-col">
-                    <span className="text-sm font-bold text-gray-700 dark:text-foreground">{item.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-muted-foreground">{item.category}</span>
-                  </div>
-                  <span className="flex items-center gap-2">
-                    <span className="text-lg font-black text-red-600 dark:text-red-400">
-                      {formatNumber(item.current_stock)}
-                    </span>
-                    <span className="text-[#3E2723] dark:text-amber-400 font-black uppercase text-[10px] tracking-widest">
-                      {item.unit}
-                    </span>
-                  </span>
-                </div>
-              ))}
-          </div>
-        </div>
-
-        <div className="bg-[#3E2723] rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-lg">
-          <h3 className="text-white font-bold text-xl mb-2">Inventory Stock In</h3>
-          <p className="text-white/80 text-sm mb-6 max-w-xs">
-            Ingredients are synced from Recipes. No direct ingredient creation is allowed.
-          </p>
-          <button
-            onClick={openStockInSelector}
-            className="bg-white dark:bg-foreground text-[#3E2723] px-8 py-3 rounded-2xl font-bold flex items-center gap-2 active:scale-95 transition-all disabled:opacity-70"
-            disabled={loading || recipeIngredientCatalog.length === 0}
-          >
-            <PlusCircle size={20} /> New Ingredient
-          </button>
-        </div>
-      </div>
 
       {!loading && items.length === 0 && recipeIngredientCatalog.length > 0 && (
         <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 text-sm text-blue-700 dark:text-blue-400">
@@ -1973,6 +1885,15 @@ export function InventoryScreen({
                 <option value="stock-desc">Stock: High to Low</option>
               </select>
             </div>
+
+            <button
+              type="button"
+              onClick={openStockInSelector}
+              className="shrink-0 px-4 py-3 rounded-2xl bg-[#3E2723] text-white text-sm font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
+              disabled={loading || recipeIngredientCatalog.length === 0}
+            >
+              New Ingredient
+            </button>
           </div>
         </div>
 

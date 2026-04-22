@@ -33,11 +33,11 @@ import {
 import {
   isHeicOrHeifFile,
   normalizeImageForAiScan,
-  requestCameraPermissionForStillPhoto,
   waitForNextPaint,
 } from "@/lib/imageUpload";
 import { evaluateImageQualityForAi } from "@/lib/imageQuality";
 import { createSaleTransaction } from "@/lib/transactionService";
+import { CameraCaptureDialog } from "@/components/ui/CameraCaptureDialog";
 import type {
   InventoryItemRow,
   OperationType,
@@ -318,7 +318,6 @@ export function TransactionsScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const aiUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const aiCameraInputRef = useRef<HTMLInputElement | null>(null);
   const aiImagePreparingRef = useRef(false);
   const aiProgressClearTimeoutRef = useRef<number | null>(null);
   const aiImagePreparationClearTimeoutRef = useRef<number | null>(null);
@@ -334,6 +333,7 @@ export function TransactionsScreen({
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [isAiDisputing, setIsAiDisputing] = useState(false);
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
+  const [isAiCameraDialogOpen, setIsAiCameraDialogOpen] = useState(false);
   const [aiScanResult, setAiScanResult] = useState<StockOutProductScanResult | null>(null);
   const [aiSelectedProductId, setAiSelectedProductId] = useState<string | null>(null);
   const [aiQuantityInput, setAiQuantityInput] = useState("1");
@@ -532,6 +532,7 @@ export function TransactionsScreen({
     setAiScanElapsedMs(0);
     setAiImagePreparation(null);
     setAiImageInputChoice("none");
+    setIsAiCameraDialogOpen(false);
     setAiScanProgress(null);
     setAiImage(null);
     setAiScanResult(null);
@@ -597,24 +598,14 @@ export function TransactionsScreen({
     aiUploadInputRef.current?.click();
   };
 
-  const openAiCameraCapture = async () => {
+  const openAiCameraCapture = () => {
     if (isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting) {
       return;
     }
 
     setActionError(null);
-
-    try {
-      await requestCameraPermissionForStillPhoto();
-      setAiImageInputChoice("camera");
-      aiCameraInputRef.current?.click();
-    } catch (cameraError) {
-      setActionError(
-        cameraError instanceof Error
-          ? cameraError.message
-          : "Camera permission is required to take a photo."
-      );
-    }
+    setAiImageInputChoice("camera");
+    setIsAiCameraDialogOpen(true);
   };
 
   useEffect(() => {
@@ -1386,6 +1377,7 @@ export function TransactionsScreen({
       )}
 
       {isStockOutAiModalOpen && (
+        <>
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-card rounded-2xl w-full max-w-6xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-5 border-b border-gray-100 dark:border-border flex items-center justify-between">
@@ -1464,24 +1456,6 @@ export function TransactionsScreen({
                       ref={aiUploadInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
-                      className="hidden"
-                      disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
-                      onChange={(event) => {
-                        const nextFile = event.currentTarget.files?.[0];
-
-                        if (nextFile) {
-                          void setAiImageFile(nextFile);
-                        }
-
-                        event.currentTarget.value = "";
-                      }}
-                    />
-
-                    <input
-                      ref={aiCameraInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
                       className="hidden"
                       disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
                       onChange={(event) => {
@@ -1575,9 +1549,7 @@ export function TransactionsScreen({
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        void openAiCameraCapture();
-                      }}
+                      onClick={openAiCameraCapture}
                       className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
                     >
@@ -1848,6 +1820,17 @@ export function TransactionsScreen({
             </div>
           </div>
         </div>
+
+        <CameraCaptureDialog
+          isOpen={isAiCameraDialogOpen}
+          onClose={() => setIsAiCameraDialogOpen(false)}
+          onCapture={setAiImageFile}
+          onError={(message) => setActionError(message)}
+          disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
+          title="Use Device Camera"
+          description="Frame the dish clearly, then capture a photo for AI scan."
+        />
+        </>
       )}
 
       {combinedError && (

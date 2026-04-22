@@ -54,7 +54,7 @@ function toCameraPermissionError(error: unknown): Error {
   );
 }
 
-export async function requestCameraPermissionForStillPhoto(): Promise<void> {
+export async function openCameraStreamForStillPhoto(): Promise<MediaStream> {
   if (
     typeof navigator === "undefined" ||
     !navigator.mediaDevices ||
@@ -65,10 +65,8 @@ export async function requestCameraPermissionForStillPhoto(): Promise<void> {
     );
   }
 
-  let stream: MediaStream | null = null;
-
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    return await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
         facingMode: {
@@ -78,6 +76,14 @@ export async function requestCameraPermissionForStillPhoto(): Promise<void> {
     });
   } catch (cameraError) {
     throw toCameraPermissionError(cameraError);
+  }
+}
+
+export async function requestCameraPermissionForStillPhoto(): Promise<void> {
+  let stream: MediaStream | null = null;
+
+  try {
+    stream = await openCameraStreamForStillPhoto();
   } finally {
     if (stream) {
       for (const track of stream.getTracks()) {

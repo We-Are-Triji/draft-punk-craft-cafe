@@ -49,7 +49,7 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
           </div>
         ) : data.length === 0 ? (
           <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
-            No scanned items yet.
+            No products sold.
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>

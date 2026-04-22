@@ -1,7 +1,7 @@
 import { WelcomeBanner } from "@/components/dashboard/WelcomeBanner";
 import { QuickShortcuts } from "@/components/dashboard/QuickShortcuts";
 import { StatsCards } from "@/components/dashboard/StatsCards";
-import { StockLevelChart } from "@/components/dashboard/StockLevelChart";
+import { LowStockAlert } from "@/components/dashboard/LowStockAlert";
 import { TopDishesChart } from "@/components/dashboard/TopDishesChart";
 import { QuickInsights } from "@/components/dashboard/QuickInsights";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
@@ -41,7 +41,7 @@ export function DashboardScreen({ onNavigate, onShortcutAction }: DashboardScree
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TopDishesChart data={metrics.top_transaction_products} loading={loading} />
-        <StockLevelChart data={metrics.stock_levels} loading={loading} />
+        <LowStockAlert data={metrics.stock_levels} loading={loading} />
       </div>
 
       <div>
