@@ -20,6 +20,7 @@ interface EditableIngredient {
   name: string;
   quantity: string;
   unit: string;
+  price: string;
 }
 
 interface ProductDraft {
@@ -48,6 +49,64 @@ const INITIAL_NEW_PRODUCT: NewProductForm = {
 const SKELETON_PRODUCTS_COUNT = 6;
 const SKELETON_INGREDIENT_ROWS = 6;
 
+const DEFAULT_INGREDIENT_PRICES: Record<string, number> = {
+  rice: 65,
+  eggs: 10,
+  chicken: 280,
+  pork: 320,
+  beef: 450,
+  milk: 95,
+  sugar: 50,
+  flour: 45,
+  butter: 140,
+  oil: 110,
+  salt: 15,
+  pepper: 30,
+  garlic: 25,
+  onion: 35,
+  tomato: 45,
+  cheese: 190,
+  cream: 120,
+  lemon: 25,
+  lime: 20,
+  ginger: 40,
+  soy: 60,
+  vinegar: 55,
+  potato: 40,
+  carrot: 35,
+  celery: 45,
+  lettuce: 65,
+  bread: 85,
+  pasta: 75,
+  noodles: 80,
+  chocolate: 170,
+  vanilla: 250,
+  cinnamon: 100,
+  coffee: 280,
+  tea: 140,
+  water: 5,
+  gin: 650,
+  rum: 550,
+  vodka: 600,
+  whiskey: 850,
+  wine: 450,
+  beer: 170,
+  coke: 85,
+  soda: 65,
+  juice: 110,
+  syrup: 190,
+};
+
+function getDefaultPrice(ingredientName: string): string {
+  const normalized = ingredientName.trim().toLowerCase();
+  for (const [key, price] of Object.entries(DEFAULT_INGREDIENT_PRICES)) {
+    if (normalized.includes(key)) {
+      return price.toFixed(2);
+    }
+  }
+  return '55.00';
+}
+
 function formatQuantity(value: number): string {
   if (Number.isInteger(value)) {
     return String(value);
@@ -68,6 +127,7 @@ function toProductDraft(product: ProductWithIngredients): ProductDraft {
       name: ingredient.name,
       quantity: formatQuantity(ingredient.quantity),
       unit: ingredient.unit,
+      price: getDefaultPrice(ingredient.name),
     })),
   };
 }
@@ -118,6 +178,7 @@ export const RecipesScreen = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newProduct, setNewProduct] = useState<NewProductForm>(INITIAL_NEW_PRODUCT);
+  const [ingredientPrices, setIngredientPrices] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (products.length === 0) {
@@ -150,6 +211,14 @@ export const RecipesScreen = () => {
   );
 
   const selectedForView = isEditing && draft ? draft : null;
+
+  const getIngredientPrice = (ingredientId: string, ingredientName: string): string => {
+    return ingredientPrices[ingredientId] ?? getDefaultPrice(ingredientName);
+  };
+
+  const handleChangePrice = (ingredientId: string, value: string) => {
+    setIngredientPrices((prev) => ({ ...prev, [ingredientId]: value }));
+  };
 
   const handleSelectProduct = (productId: string) => {
     setSelectedProductId(productId);
@@ -224,6 +293,7 @@ export const RecipesScreen = () => {
             name: '',
             quantity: '0',
             unit: 'pcs',
+            price: '55.00',
           },
         ],
       };
@@ -588,6 +658,7 @@ export const RecipesScreen = () => {
                     <th className="pb-4 px-2">Ingredient Name</th>
                     <th className="pb-4 px-2 w-36">Qty</th>
                     <th className="pb-4 px-2 w-32">Unit</th>
+                    <th className="pb-4 px-2 w-32">Price</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-border/50">
@@ -601,6 +672,9 @@ export const RecipesScreen = () => {
                       </td>
                       <td className="py-5 px-2">
                         <div className="h-4 w-14 rounded bg-gray-100 dark:bg-muted animate-pulse" />
+                      </td>
+                      <td className="py-5 px-2">
+                        <div className="h-4 w-16 rounded bg-gray-100 dark:bg-muted animate-pulse" />
                       </td>
                     </tr>
                   ))}
@@ -747,6 +821,7 @@ export const RecipesScreen = () => {
                     <th className="pb-4 px-2">Ingredient Name</th>
                     <th className="pb-4 px-2 w-36">Qty</th>
                     <th className="pb-4 px-2 w-32">Unit</th>
+                    <th className="pb-4 px-2 w-32">Price</th>
                     {isEditing && <th className="pb-4 px-2 w-20 text-right">Action</th>}
                   </tr>
                 </thead>
@@ -814,6 +889,32 @@ export const RecipesScreen = () => {
                           </span>
                         )}
                       </td>
+                      <td className="py-5 px-2">
+                        {isEditing && selectedForView ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={ingredient.price}
+                            onChange={(event) =>
+                              handleChangeIngredient(
+                                ingredient.id,
+                                'price',
+                                event.target.value
+                              )
+                            }
+                            className="w-24 p-2 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl font-bold text-center outline-none focus:ring-1 focus:ring-[#3E2723]"
+                          />
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400 cursor-pointer hover:underline"
+                            title="Click edit to change price"
+                            onClick={handleStartEdit}
+                          >
+                            ₱{getIngredientPrice(ingredient.id, ingredient.name)}
+                          </span>
+                        )}
+                      </td>
                       {isEditing && selectedForView && (
                         <td className="py-5 px-2 text-right">
                           <button
@@ -830,7 +931,7 @@ export const RecipesScreen = () => {
 
                   {!isEditing && selectedProduct.ingredients.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="py-10 text-center text-sm font-semibold text-gray-400 dark:text-muted-foreground">
+                      <td colSpan={4} className="py-10 text-center text-sm font-semibold text-gray-400 dark:text-muted-foreground">
                         No ingredients yet.
                       </td>
                     </tr>
