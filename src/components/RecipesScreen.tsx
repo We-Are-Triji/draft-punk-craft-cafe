@@ -10,10 +10,12 @@ import {
   Plus,
   X,
   AlertTriangle,
+  Download,
 } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
 import { createProduct, deleteProduct, updateProduct } from '@/lib/recipesService';
 import type { ProductIngredientInput, ProductWithIngredients } from '@/types/recipes';
+import { buildRecipesExportCsv } from '@/lib/recipeCsv';
 
 interface EditableIngredient {
   id: string;
@@ -163,6 +165,22 @@ function normalizeIngredientInput(
       };
     })
     .filter((ingredient) => ingredient.name.length > 0);
+}
+
+function downloadTextFile(fileName: string, content: string, mimeType: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = window.document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  window.document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export const RecipesScreen = () => {
@@ -416,6 +434,27 @@ export const RecipesScreen = () => {
     }
   };
 
+  const handleExportRecipesCsv = () => {
+    if (products.length === 0) {
+      setActionError('No products available to export.');
+      return;
+    }
+
+    const csvContent = buildRecipesExportCsv(products);
+    const now = new Date();
+    const fileStamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')}`;
+
+    downloadTextFile(
+      `recipes-export-${fileStamp}.csv`,
+      csvContent,
+      'text/csv;charset=utf-8;'
+    );
+
+    setActionError(null);
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 p-2 h-[calc(100vh-120px)] animate-in fade-in duration-500">
       {isCreateModalOpen && (
@@ -532,13 +571,22 @@ export const RecipesScreen = () => {
         <div className="p-6 border-b border-gray-50 dark:border-border/50 space-y-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-xl font-bold text-gray-800 dark:text-foreground">Draft Punk Recipes</h2>
-            <button
-              className="inline-flex items-center gap-2 px-3 py-2 bg-[#3E2723] text-white rounded-xl text-xs font-bold"
-              onClick={() => setIsCreateModalOpen(true)}
-              type="button"
-            >
-              <Plus size={14} /> Add
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border border-gray-200 dark:border-border text-gray-600 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-muted/50"
+                onClick={handleExportRecipesCsv}
+                type="button"
+              >
+                <Download size={14} /> Export
+              </button>
+              <button
+                className="inline-flex items-center gap-2 px-3 py-2 bg-[#3E2723] text-white rounded-xl text-xs font-bold"
+                onClick={() => setIsCreateModalOpen(true)}
+                type="button"
+              >
+                <Plus size={14} /> Add
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3">
