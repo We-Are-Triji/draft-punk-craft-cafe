@@ -334,6 +334,7 @@ export function TransactionsScreen({
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [isAiCameraDialogOpen, setIsAiCameraDialogOpen] = useState(false);
   const pendingAutoScanRef = useRef(false);
+  const [aiDisputedProductIds, setAiDisputedProductIds] = useState<string[]>([]);
   const [aiScanResult, setAiScanResult] = useState<StockOutProductScanResult | null>(null);
   const [aiSelectedProductId, setAiSelectedProductId] = useState<string | null>(null);
   const [aiQuantityInput, setAiQuantityInput] = useState("1");
@@ -547,6 +548,7 @@ export function TransactionsScreen({
     setAiSelectedProductId(null);
     setAiQuantityInput("1");
     setAiNotesInput("");
+    setAiDisputedProductIds([]);
     setIsAiDragging(false);
     setAiPreviewUrl((currentPreview) => {
       if (currentPreview) {
@@ -675,6 +677,7 @@ export function TransactionsScreen({
     setAiScanResult(null);
     setAiSelectedProductId(null);
     setAiQuantityInput("1");
+    setAiDisputedProductIds([]);
     setAiPreviewUrl((currentPreview) => {
       if (currentPreview) {
         URL.revokeObjectURL(currentPreview);
@@ -860,6 +863,13 @@ export function TransactionsScreen({
       return;
     }
 
+    // Add the currently detected product to the exclusion list so the AI won't pick it again.
+    const currentProductId = aiScanResult?.product_id ?? aiSelectedProductId;
+    const updatedExclusions = currentProductId
+      ? [...aiDisputedProductIds, currentProductId]
+      : aiDisputedProductIds;
+    setAiDisputedProductIds(updatedExclusions);
+
     setActionSuccess(null);
     setActionError(null);
     if (aiProgressClearTimeoutRef.current !== null) {
@@ -886,6 +896,7 @@ export function TransactionsScreen({
         {
           forceFresh: true,
           invalidateExistingCache: true,
+          excludeProductIds: updatedExclusions,
         }
       );
 

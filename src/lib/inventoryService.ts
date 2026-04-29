@@ -131,6 +131,7 @@ interface CachedStockOutSemanticPayload {
 interface ScanCacheControlOptions {
   forceFresh?: boolean;
   invalidateExistingCache?: boolean;
+  excludeProductIds?: string[];
 }
 
 interface StockInScanCorrectionInput {
@@ -1275,16 +1276,23 @@ export async function scanImageForStockOutProductCatalog(
   const normalizedCatalog = normalizeStockOutCatalog(catalog);
   const forceFresh = options?.forceFresh === true;
   const invalidateExistingCache = options?.invalidateExistingCache === true;
+  const excludeProductIds = options?.excludeProductIds ?? [];
 
-  if (normalizedCatalog.length === 0) {
-    throw new Error("Product catalog is empty. Configure products first.");
+  // Filter out disputed products so the AI never picks them again for this image.
+  const effectiveCatalog = excludeProductIds.length > 0
+    ? normalizedCatalog.filter((entry) => !excludeProductIds.includes(entry.id))
+    : normalizedCatalog;
+
+  if (effectiveCatalog.length === 0) {
+    throw new Error("All products have been excluded. Please select the product manually.");
   }
 
   reportScanProgress(onProgress, 14, "Preparing scan context...");
   const imageHash = await hashImageFile(file);
   reportScanProgress(onProgress, 24, "Computing scan signature...");
   const scope = getStockOutSemanticScope(normalizedCatalog);
-  const taskKey = `${scope}:${imageHash}:${forceFresh ? "fresh" : "default"}`;
+  const exclusionSuffix = excludeProductIds.length > 0 ? `:excl=${excludeProductIds.sort().join(",")}` : "";
+  const taskKey = `${scope}:${imageHash}:${forceFresh ? "fresh" : "default"}${exclusionSuffix}`;
   const inFlightScan = stockOutScansInFlightByKey.get(taskKey);
 
   if (inFlightScan) {
@@ -1349,7 +1357,7 @@ export async function scanImageForStockOutProductCatalog(
     reportScanProgress(onProgress, 34, "Submitting image to AI...");
     const classified = await classifyProductWithCatalogGemini(
       file,
-      normalizedCatalog,
+      effectiveCatalog,
       (event) => {
         const progress = toScanProgressFromModelEvent(event);
         reportScanProgress(onProgress, progress.percent, progress.message);
