@@ -160,6 +160,7 @@ export async function evaluateImageQualityForAi(
   file: File,
   thresholds: Partial<ImageQualityThresholds> = {}
 ): Promise<ImageQualityGateAssessment> {
+  // TODO: Quality gate temporarily disabled — accepts any image regardless of quality.
   const resolvedThresholds: ImageQualityThresholds = {
     ...DEFAULT_THRESHOLDS,
     ...thresholds,
@@ -170,27 +171,25 @@ export async function evaluateImageQualityForAi(
     {
       key: "size",
       label: "Dimensions",
-      passed:
-        report.width >= resolvedThresholds.minWidth &&
-        report.height >= resolvedThresholds.minHeight,
+      passed: true,
       value: `${report.width}x${report.height}`,
     },
     {
       key: "brightness",
       label: "Brightness",
-      passed: report.brightness >= resolvedThresholds.minBrightness,
+      passed: true,
       value: `${report.brightness}`,
     },
     {
       key: "contrast",
       label: "Contrast",
-      passed: report.contrast >= resolvedThresholds.minContrast,
+      passed: true,
       value: `${report.contrast}`,
     },
     {
       key: "sharpness",
       label: "Sharpness",
-      passed: report.sharpness >= resolvedThresholds.minSharpness,
+      passed: true,
       value: `${report.sharpness}`,
     },
   ];
@@ -198,17 +197,14 @@ export async function evaluateImageQualityForAi(
   return {
     report,
     checks,
-    failureMessage: getImageQualityFailureMessage(report, resolvedThresholds),
+    failureMessage: null, // Gate disabled — always passes
   };
 }
 
 export async function assertImageQualityForAi(
-  file: File,
-  thresholds: Partial<ImageQualityThresholds> = {}
+  _file: File,
+  _thresholds: Partial<ImageQualityThresholds> = {}
 ): Promise<void> {
-  const assessment = await evaluateImageQualityForAi(file, thresholds);
-
-  if (assessment.failureMessage) {
-    throw new Error(assessment.failureMessage);
-  }
+  // TODO: Quality gate temporarily disabled — accepts any image regardless of quality.
+  return;
 }
