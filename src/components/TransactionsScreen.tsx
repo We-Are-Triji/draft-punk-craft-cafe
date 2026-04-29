@@ -16,7 +16,6 @@ import {
   PlusCircle,
   Search,
   ShoppingCart,
-  Sparkles,
   TriangleAlert,
   UploadCloud,
   XCircle,
@@ -334,6 +333,7 @@ export function TransactionsScreen({
   const [isAiDisputing, setIsAiDisputing] = useState(false);
   const [isAiSubmitting, setIsAiSubmitting] = useState(false);
   const [isAiCameraDialogOpen, setIsAiCameraDialogOpen] = useState(false);
+  const pendingAutoScanRef = useRef(false);
   const [aiScanResult, setAiScanResult] = useState<StockOutProductScanResult | null>(null);
   const [aiSelectedProductId, setAiSelectedProductId] = useState<string | null>(null);
   const [aiQuantityInput, setAiQuantityInput] = useState("1");
@@ -497,6 +497,14 @@ export function TransactionsScreen({
       window.clearInterval(intervalId);
     };
   }, [isAiScanning]);
+
+  // Auto-trigger AI scan once image preparation completes successfully.
+  useEffect(() => {
+    if (pendingAutoScanRef.current && aiImage && !isAiImagePreparing && !isAiScanning) {
+      pendingAutoScanRef.current = false;
+      void handleAiScan();
+    }
+  });
 
   const aiSaleRequirements = useMemo(() => {
     if (!aiSelectedProduct) {
@@ -718,6 +726,8 @@ export function TransactionsScreen({
           .map((check) => `${check.label}: ${check.value}`)
           .join(" • "),
       });
+
+      pendingAutoScanRef.current = true;
 
       aiImagePreparationClearTimeoutRef.current = window.setTimeout(() => {
         setAiImagePreparation(null);
@@ -1566,23 +1576,6 @@ export function TransactionsScreen({
                       disabled={isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
                     >
                       Upload Photo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAiScan}
-                      className="px-3 py-2 rounded-xl bg-[#3E2723] text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!aiImage || isAiImagePreparing || isAiScanning || isAiDisputing || isAiSubmitting}
-                    >
-                      {isAiScanning ? (
-                        <span className="inline-flex items-center gap-2">
-                          <LoaderCircle className="animate-spin" size={14} />
-                          {isAiDisputing ? "Refreshing..." : "Scanning..."}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2">
-                          <Sparkles size={14} /> Scan With AI
-                        </span>
-                      )}
                     </button>
                     {aiImage ? (
                       <span className="text-xs text-gray-500 dark:text-muted-foreground">{aiImage.name}</span>

@@ -5,7 +5,6 @@ import {
   Filter,
   LoaderCircle,
   Search,
-  Sparkles,
   UploadCloud,
   XCircle,
 } from "lucide-react";
@@ -358,6 +357,7 @@ export function InventoryScreen({
   const [isAiDisputing, setIsAiDisputing] = useState(false);
   const [isAiConfirming, setIsAiConfirming] = useState(false);
   const [isAiCameraDialogOpen, setIsAiCameraDialogOpen] = useState(false);
+  const pendingAutoScanRef = useRef(false);
 
   const loading = inventoryLoading || productsLoading;
 
@@ -485,6 +485,14 @@ export function InventoryScreen({
       window.clearInterval(intervalId);
     };
   }, [isAiScanning]);
+
+  // Auto-trigger AI scan once image preparation completes successfully.
+  useEffect(() => {
+    if (pendingAutoScanRef.current && aiImage && !isAiImagePreparing && !isAiScanning) {
+      pendingAutoScanRef.current = false;
+      void handleAiScan();
+    }
+  });
 
   const paginatedIngredients = useMemo(
     () =>
@@ -798,6 +806,8 @@ export function InventoryScreen({
           .map((check) => `${check.label}: ${check.value}`)
           .join(" • "),
       });
+
+      pendingAutoScanRef.current = true;
 
       aiImagePreparationClearTimeoutRef.current = window.setTimeout(() => {
         setAiImagePreparation(null);
@@ -1562,29 +1572,6 @@ export function InventoryScreen({
                       }
                     >
                       Upload Photo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAiScan}
-                      className="px-3 py-2 rounded-xl bg-[#3E2723] text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={
-                        !aiImage ||
-                        isAiImagePreparing ||
-                        isAiScanning ||
-                        isAiDisputing ||
-                        isAiConfirming
-                      }
-                    >
-                      {isAiScanning ? (
-                        <span className="inline-flex items-center gap-2">
-                          <LoaderCircle className="animate-spin" size={14} />
-                          {isAiDisputing ? "Refreshing..." : "Scanning..."}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2">
-                          <Sparkles size={14} /> Scan With AI
-                        </span>
-                      )}
                     </button>
                     {aiImage ? (
                       <span className="text-xs text-gray-500 dark:text-muted-foreground">{aiImage.name}</span>
