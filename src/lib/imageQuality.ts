@@ -25,13 +25,14 @@ export interface ImageQualityGateAssessment {
   failureMessage: string | null;
 }
 
-const DEFAULT_THRESHOLDS: ImageQualityThresholds = {
-  minBrightness: 28,
-  minContrast: 18,
-  minSharpness: 20,
-  minWidth: 220,
-  minHeight: 220,
-};
+// TODO: Quality gate temporarily disabled — thresholds retained for future re-enablement.
+// const DEFAULT_THRESHOLDS: ImageQualityThresholds = {
+//   minBrightness: 28,
+//   minContrast: 18,
+//   minSharpness: 20,
+//   minWidth: 220,
+//   minHeight: 220,
+// };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -133,38 +134,31 @@ export async function analyzeImageQuality(file: File): Promise<ImageQualityRepor
   };
 }
 
-function getImageQualityFailureMessage(
-  report: ImageQualityReport,
-  thresholds: ImageQualityThresholds
-): string | null {
-  if (report.width < thresholds.minWidth || report.height < thresholds.minHeight) {
-    return `Image is too small for reliable scanning (${report.width}x${report.height}). Use a clearer image.`;
-  }
-
-  if (report.brightness < thresholds.minBrightness) {
-    return "Image is too dark. Increase lighting and try again.";
-  }
-
-  if (report.contrast < thresholds.minContrast) {
-    return "Image contrast is too low. Ensure labels and product edges are visible.";
-  }
-
-  if (report.sharpness < thresholds.minSharpness) {
-    return "Image appears blurry. Hold steady and retake the photo.";
-  }
-
-  return null;
-}
+// TODO: Quality gate temporarily disabled — function retained for future re-enablement.
+// function getImageQualityFailureMessage(
+//   report: ImageQualityReport,
+//   thresholds: ImageQualityThresholds
+// ): string | null {
+//   if (report.width < thresholds.minWidth || report.height < thresholds.minHeight) {
+//     return `Image is too small for reliable scanning (${report.width}x${report.height}). Use a clearer image.`;
+//   }
+//   if (report.brightness < thresholds.minBrightness) {
+//     return "Image is too dark. Increase lighting and try again.";
+//   }
+//   if (report.contrast < thresholds.minContrast) {
+//     return "Image contrast is too low. Ensure labels and product edges are visible.";
+//   }
+//   if (report.sharpness < thresholds.minSharpness) {
+//     return "Image appears blurry. Hold steady and retake the photo.";
+//   }
+//   return null;
+// }
 
 export async function evaluateImageQualityForAi(
   file: File,
-  thresholds: Partial<ImageQualityThresholds> = {}
+  _thresholds: Partial<ImageQualityThresholds> = {}
 ): Promise<ImageQualityGateAssessment> {
   // TODO: Quality gate temporarily disabled — accepts any image regardless of quality.
-  const resolvedThresholds: ImageQualityThresholds = {
-    ...DEFAULT_THRESHOLDS,
-    ...thresholds,
-  };
 
   const report = await analyzeImageQuality(file);
   const checks: ImageQualityGateAssessment["checks"] = [
