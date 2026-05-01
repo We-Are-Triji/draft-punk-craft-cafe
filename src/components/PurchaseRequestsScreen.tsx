@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
+import { useProducts } from "@/hooks/useProducts";
 import {
   createPurchaseRequest,
   updatePurchaseRequestStatus,
@@ -38,8 +39,28 @@ const urgencyStyles: Record<UrgencyLevel, string> = {
   urgent: "bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400",
 };
 
+interface IngredientOption {
+  name: string;
+  unit: string;
+}
+
+function buildIngredientOptions(products: { ingredients: { name: string; unit: string }[] }[]): IngredientOption[] {
+  const map = new Map<string, IngredientOption>();
+  for (const product of products) {
+    for (const ing of product.ingredients) {
+      const key = ing.name.trim().toLowerCase();
+      if (!key) continue;
+      if (!map.has(key)) {
+        map.set(key, { name: ing.name.trim(), unit: ing.unit.trim() || "pcs" });
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function PurchaseRequestsScreen() {
   const { requests, loading, error: loadError, refresh } = usePurchaseRequests();
+  const { products } = useProducts();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | RequestStatus>("all");
   const [page, setPage] = useState(1);
@@ -53,6 +74,14 @@ export function PurchaseRequestsScreen() {
   const [unit, setUnit] = useState("pcs");
   const [urgency, setUrgency] = useState<UrgencyLevel>("normal");
   const [notes, setNotes] = useState("");
+
+  const ingredientOptions = useMemo(() => buildIngredientOptions(products), [products]);
+
+  const selectIngredient = (name: string) => {
+    setIngredientName(name);
+    const matched = ingredientOptions.find((o) => o.name === name);
+    if (matched) setUnit(matched.unit);
+  };
 
   const filtered = useMemo(() => {
     return requests.filter((r) => {
@@ -160,7 +189,12 @@ export function PurchaseRequestsScreen() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1">Ingredient Name</label>
-                <input type="text" value={ingredientName} onChange={(e) => setIngredientName(e.target.value)} placeholder="e.g. Chicken Breast" className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30" required />
+                <input type="text" list="pr-ingredients" value={ingredientName} onChange={(e) => selectIngredient(e.target.value)} placeholder="Select or type ingredient..." className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30" required />
+                <datalist id="pr-ingredients">
+                  {ingredientOptions.map((opt) => (
+                    <option key={opt.name} value={opt.name}>{opt.name} ({opt.unit})</option>
+                  ))}
+                </datalist>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -169,7 +203,7 @@ export function PurchaseRequestsScreen() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1">Unit</label>
-                  <input type="text" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="pcs, kg, g, ml" className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+                  <div className="w-full rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">{unit}</div>
                 </div>
               </div>
               <div>

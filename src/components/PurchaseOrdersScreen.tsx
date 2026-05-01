@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
+import { useProducts } from "@/hooks/useProducts";
 import {
   createPurchaseOrder,
   updatePurchaseOrderStatus,
@@ -48,8 +49,28 @@ interface FormLineItem {
   estimated_cost: number;
 }
 
+interface IngredientOption {
+  name: string;
+  unit: string;
+}
+
+function buildIngredientOptions(products: { ingredients: { name: string; unit: string }[] }[]): IngredientOption[] {
+  const map = new Map<string, IngredientOption>();
+  for (const product of products) {
+    for (const ing of product.ingredients) {
+      const key = ing.name.trim().toLowerCase();
+      if (!key) continue;
+      if (!map.has(key)) {
+        map.set(key, { name: ing.name.trim(), unit: ing.unit.trim() || "pcs" });
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function PurchaseOrdersScreen() {
   const { orders, loading, error: loadError, refresh } = usePurchaseOrders();
+  const { products } = useProducts();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   const [page, setPage] = useState(1);
@@ -65,6 +86,8 @@ export function PurchaseOrdersScreen() {
   const [lineItems, setLineItems] = useState<FormLineItem[]>([
     { id: generateLineId(), ingredient_name: "", quantity: 1, unit: "pcs", estimated_cost: 0 },
   ]);
+
+  const ingredientOptions = useMemo(() => buildIngredientOptions(products), [products]);
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
@@ -96,6 +119,17 @@ export function PurchaseOrdersScreen() {
 
   const updateLineItem = (id: string, field: keyof FormLineItem, value: string | number) => {
     setLineItems((prev) => prev.map((li) => (li.id === id ? { ...li, [field]: value } : li)));
+  };
+
+  const selectLineIngredient = (id: string, ingredientName: string) => {
+    const matched = ingredientOptions.find((o) => o.name === ingredientName);
+    setLineItems((prev) =>
+      prev.map((li) =>
+        li.id === id
+          ? { ...li, ingredient_name: ingredientName, unit: matched?.unit ?? li.unit }
+          : li
+      )
+    );
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -193,13 +227,34 @@ export function PurchaseOrdersScreen() {
                   <label className="text-xs font-semibold text-muted-foreground">Items</label>
                   <button type="button" onClick={addLineItem} className="text-xs text-amber-700 dark:text-amber-400 font-semibold hover:underline">+ Add Item</button>
                 </div>
+                <div className="grid grid-cols-[1fr_64px_56px_80px_28px] gap-1 mb-1 px-0.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground">Ingredient</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground text-right">Qty</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">Unit</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground text-right">Cost (₱)</span>
+                  <span />
+                </div>
                 <div className="space-y-2">
                   {lineItems.map((li) => (
-                    <div key={li.id} className="flex gap-2 items-start">
-                      <input type="text" value={li.ingredient_name} onChange={(e) => updateLineItem(li.id, "ingredient_name", e.target.value)} placeholder="Ingredient" className="flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
-                      <input type="number" value={li.quantity} onChange={(e) => updateLineItem(li.id, "quantity", Number(e.target.value))} min="0.01" step="any" className="w-16 rounded-lg border border-border bg-background px-2 py-2 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
-                      <input type="text" value={li.unit} onChange={(e) => updateLineItem(li.id, "unit", e.target.value)} placeholder="unit" className="w-14 rounded-lg border border-border bg-background px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
-                      <input type="number" value={li.estimated_cost} onChange={(e) => updateLineItem(li.id, "estimated_cost", Number(e.target.value))} min="0" step="0.01" placeholder="₱" className="w-20 rounded-lg border border-border bg-background px-2 py-2 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+                    <div key={li.id} className="grid grid-cols-[1fr_64px_56px_80px_28px] gap-2 items-start">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          list={`ingredients-${li.id}`}
+                          value={li.ingredient_name}
+                          onChange={(e) => selectLineIngredient(li.id, e.target.value)}
+                          placeholder="Select or type..."
+                          className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                        />
+                        <datalist id={`ingredients-${li.id}`}>
+                          {ingredientOptions.map((opt) => (
+                            <option key={opt.name} value={opt.name}>{opt.name} ({opt.unit})</option>
+                          ))}
+                        </datalist>
+                      </div>
+                      <input type="number" value={li.quantity} onChange={(e) => updateLineItem(li.id, "quantity", Number(e.target.value))} min="0.01" step="any" className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+                      <span className="rounded-lg border border-border bg-muted/40 px-2 py-2 text-xs text-muted-foreground text-center">{li.unit}</span>
+                      <input type="number" value={li.estimated_cost} onChange={(e) => updateLineItem(li.id, "estimated_cost", Number(e.target.value))} min="0" step="0.01" placeholder="0.00" className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
                       <button type="button" onClick={() => removeLineItem(li.id)} className="text-red-400 hover:text-red-600 pt-2"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
