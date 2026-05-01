@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
 import { useProducts } from "@/hooks/useProducts";
+import { IngredientCombobox } from "@/components/ui/IngredientCombobox";
 import {
   createPurchaseRequest,
   updatePurchaseRequestStatus,
@@ -31,6 +32,7 @@ const statusStyles: Record<RequestStatus, string> = {
   pending: "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400",
   approved: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400",
   rejected: "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400",
+  ordered: "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400",
 };
 
 const urgencyStyles: Record<UrgencyLevel, string> = {
@@ -39,20 +41,15 @@ const urgencyStyles: Record<UrgencyLevel, string> = {
   urgent: "bg-orange-100 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400",
 };
 
-interface IngredientOption {
-  name: string;
-  unit: string;
-}
+interface IngredientOption { name: string; unit: string }
 
 function buildIngredientOptions(products: { ingredients: { name: string; unit: string }[] }[]): IngredientOption[] {
   const map = new Map<string, IngredientOption>();
-  for (const product of products) {
-    for (const ing of product.ingredients) {
+  for (const p of products) {
+    for (const ing of p.ingredients) {
       const key = ing.name.trim().toLowerCase();
       if (!key) continue;
-      if (!map.has(key)) {
-        map.set(key, { name: ing.name.trim(), unit: ing.unit.trim() || "pcs" });
-      }
+      if (!map.has(key)) map.set(key, { name: ing.name.trim(), unit: ing.unit.trim() || "pcs" });
     }
   }
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -68,9 +65,8 @@ export function PurchaseRequestsScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Form state
   const [ingredientName, setIngredientName] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("pcs");
   const [urgency, setUrgency] = useState<UrgencyLevel>("normal");
   const [notes, setNotes] = useState("");
@@ -85,9 +81,8 @@ export function PurchaseRequestsScreen() {
 
   const filtered = useMemo(() => {
     return requests.filter((r) => {
-      const matchesSearch =
-        r.ingredient_name.toLowerCase().includes(search.toLowerCase()) ||
-        r.notes.toLowerCase().includes(search.toLowerCase());
+      const q = search.toLowerCase();
+      const matchesSearch = r.ingredient_name.toLowerCase().includes(q) || r.notes.toLowerCase().includes(q);
       const matchesStatus = statusFilter === "all" || r.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -96,29 +91,16 @@ export function PurchaseRequestsScreen() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const resetForm = () => {
-    setIngredientName("");
-    setQuantity("1");
-    setUnit("pcs");
-    setUrgency("normal");
-    setNotes("");
-  };
+  const resetForm = () => { setIngredientName(""); setQuantity(""); setUnit("pcs"); setUrgency("normal"); setNotes(""); };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const parsedQty = Number(quantity);
     if (!ingredientName.trim() || !Number.isFinite(parsedQty) || parsedQty <= 0) return;
-
     setIsSubmitting(true);
     setActionError(null);
     try {
-      await createPurchaseRequest({
-        ingredient_name: ingredientName.trim(),
-        quantity: parsedQty,
-        unit: unit.trim() || "pcs",
-        urgency,
-        notes: notes.trim(),
-      });
+      await createPurchaseRequest({ ingredient_name: ingredientName.trim(), quantity: parsedQty, unit: unit.trim() || "pcs", urgency, notes: notes.trim() });
       await refresh();
       resetForm();
       setIsFormOpen(false);
@@ -132,25 +114,18 @@ export function PurchaseRequestsScreen() {
 
   const handleStatusChange = async (id: string, status: RequestStatus) => {
     setActionError(null);
-    try {
-      await updatePurchaseRequestStatus(id, status);
-      await refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to update status.");
-    }
+    try { await updatePurchaseRequestStatus(id, status); await refresh(); }
+    catch (err) { setActionError(err instanceof Error ? err.message : "Failed to update status."); }
   };
 
   const handleDelete = async (id: string) => {
     setActionError(null);
-    try {
-      await deletePurchaseRequest(id);
-      await refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete request.");
-    }
+    try { await deletePurchaseRequest(id); await refresh(); }
+    catch (err) { setActionError(err instanceof Error ? err.message : "Failed to delete request."); }
   };
 
   const displayError = actionError ?? loadError;
+  const approvedCount = requests.filter((r) => r.status === "approved").length;
 
   return (
     <div className="space-y-6">
@@ -161,19 +136,20 @@ export function PurchaseRequestsScreen() {
             Request ingredients for purchasing
           </p>
         </div>
-        <button
-          onClick={() => setIsFormOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md shadow-amber-900/20 hover:from-amber-700 hover:to-amber-600 transition-all"
-        >
-          <PlusCircle className="w-4 h-4" />
-          New Request
-        </button>
+        <div className="flex items-center gap-3">
+          {approvedCount > 0 && (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+              {approvedCount} approved — ready for Purchase Order
+            </span>
+          )}
+          <button onClick={() => setIsFormOpen(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md shadow-amber-900/20 hover:from-amber-700 hover:to-amber-600 transition-all">
+            <PlusCircle className="w-4 h-4" /> New Request
+          </button>
+        </div>
       </div>
 
       {displayError && (
-        <div className="rounded-xl border border-red-100 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          {displayError}
-        </div>
+        <div className="rounded-xl border border-red-100 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">{displayError}</div>
       )}
 
       {/* New Request Modal */}
@@ -182,24 +158,17 @@ export function PurchaseRequestsScreen() {
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-md mx-4 p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold text-foreground">New Purchase Request</h2>
-              <button onClick={() => { setIsFormOpen(false); resetForm(); }} className="text-muted-foreground hover:text-foreground">
-                <XCircle className="w-5 h-5" />
-              </button>
+              <button onClick={() => { setIsFormOpen(false); resetForm(); }} className="text-muted-foreground hover:text-foreground"><XCircle className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">Ingredient Name</label>
-                <input type="text" list="pr-ingredients" value={ingredientName} onChange={(e) => selectIngredient(e.target.value)} placeholder="Select or type ingredient..." className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30" required />
-                <datalist id="pr-ingredients">
-                  {ingredientOptions.map((opt) => (
-                    <option key={opt.name} value={opt.name}>{opt.name} ({opt.unit})</option>
-                  ))}
-                </datalist>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">Ingredient</label>
+                <IngredientCombobox options={ingredientOptions} value={ingredientName} onChange={selectIngredient} placeholder="Select or type ingredient..." className="rounded-xl px-3 py-2.5 text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1">Quantity</label>
-                  <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="0.01" step="any" className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30" required />
+                  <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} min="0.01" step="any" placeholder="" className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30" required />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1">Unit</label>
@@ -238,13 +207,12 @@ export function PurchaseRequestsScreen() {
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
+            <option value="ordered">Ordered</option>
           </select>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <LoaderCircle className="w-5 h-5 animate-spin mr-2" /> Loading requests...
-          </div>
+          <div className="flex items-center justify-center py-16 text-muted-foreground"><LoaderCircle className="w-5 h-5 animate-spin mr-2" /> Loading requests...</div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <FileText className="w-10 h-10 mb-3 opacity-40" />
@@ -277,18 +245,22 @@ export function PurchaseRequestsScreen() {
                         <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase", urgencyStyles[r.urgency])}>{r.urgency}</span>
                       </td>
                       <td className="py-3 px-3 text-center">
-                        <select value={r.status} onChange={(e) => handleStatusChange(r.id, e.target.value as RequestStatus)} className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border-0 cursor-pointer focus:outline-none", statusStyles[r.status])}>
-                          <option value="pending">Pending</option>
-                          <option value="approved">Approved</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
+                        {r.status === "ordered" ? (
+                          <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase", statusStyles.ordered)}>Ordered</span>
+                        ) : (
+                          <select value={r.status} onChange={(e) => handleStatusChange(r.id, e.target.value as RequestStatus)} className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border-0 cursor-pointer focus:outline-none", statusStyles[r.status])}>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-muted-foreground text-xs">{formatDate(r.created_at)}</td>
                       <td className="py-3 px-3 text-muted-foreground text-xs max-w-[150px] truncate">{r.notes || "—"}</td>
                       <td className="py-3 px-3 text-center">
-                        <button onClick={() => handleDelete(r.id)} className="text-red-400 hover:text-red-600 transition-colors" title="Delete">
-                          <XCircle className="w-4 h-4" />
-                        </button>
+                        {r.status !== "ordered" && (
+                          <button onClick={() => handleDelete(r.id)} className="text-red-400 hover:text-red-600 transition-colors" title="Delete"><XCircle className="w-4 h-4" /></button>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -2,7 +2,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 
 // --- Types ---
 
-export type RequestStatus = "pending" | "approved" | "rejected";
+export type RequestStatus = "pending" | "approved" | "rejected" | "ordered";
 export type UrgencyLevel = "low" | "normal" | "urgent";
 export type OrderStatus = "draft" | "sent" | "received";
 
@@ -14,6 +14,7 @@ export interface PurchaseRequestRow {
   urgency: UrgencyLevel;
   notes: string;
   status: RequestStatus;
+  order_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -50,16 +51,11 @@ export interface CreatePurchaseRequestInput {
   notes?: string;
 }
 
-export interface CreatePurchaseOrderInput {
+export interface CreatePurchaseOrderFromRequestsInput {
   supplier_name: string;
   expected_date?: string | null;
   notes?: string;
-  items: Array<{
-    ingredient_name: string;
-    quantity: number;
-    unit: string;
-    estimated_cost: number;
-  }>;
+  request_ids: string[];
 }
 
 // --- Helpers ---
@@ -71,7 +67,7 @@ function toNumber(value: unknown, fallback = 0): number {
 
 function toRequestStatus(value: unknown): RequestStatus {
   const s = String(value);
-  if (s === "pending" || s === "approved" || s === "rejected") return s;
+  if (s === "pending" || s === "approved" || s === "rejected" || s === "ordered") return s;
   return "pending";
 }
 
@@ -96,6 +92,7 @@ function mapRequestRow(row: Record<string, unknown>): PurchaseRequestRow {
     urgency: toUrgency(row.urgency),
     notes: String(row.notes ?? ""),
     status: toRequestStatus(row.status),
+    order_id: row.order_id ? String(row.order_id) : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -220,15 +217,21 @@ export async function listPurchaseOrders(limit = 200): Promise<PurchaseOrderWith
   }));
 }
 
-export async function createPurchaseOrder(input: CreatePurchaseOrderInput): Promise<PurchaseOrderWithItems> {
+export async function createPurchaseOrderFromRequests(
+  input: CreatePurchaseOrderFromRequestsInput,
+  approvedRequests: PurchaseRequestRow[],
+  priceMap: Map<string, number>
+): Promise<PurchaseOrderWithItems> {
   const supplier = input.supplier_name.trim();
   if (!supplier) throw new Error("Supplier name is required.");
+  if (input.request_ids.length === 0) throw new Error("Select at least one approved request.");
 
-  const validItems = input.items.filter((i) => i.ingredient_name.trim() && i.quantity > 0);
-  if (validItems.length === 0) throw new Error("At least one item is required.");
+  const selectedRequests = approvedRequests.filter((r) => input.request_ids.includes(r.id));
+  if (selectedRequests.length === 0) throw new Error("No valid approved requests selected.");
 
   const supabase = getSupabaseClient();
 
+  // Create the order
   const { data: orderData, error: orderError } = await supabase
     .from("purchase_orders")
     .insert({
@@ -240,15 +243,15 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput): Prom
     .single();
 
   if (orderError) throw new Error(`Failed to create purchase order: ${orderError.message}`);
-
   const order = mapOrderRow(orderData as Record<string, unknown>);
 
-  const itemPayloads = validItems.map((i) => ({
+  // Create line items from selected requests
+  const itemPayloads = selectedRequests.map((r) => ({
     order_id: order.id,
-    ingredient_name: i.ingredient_name.trim(),
-    quantity: i.quantity,
-    unit: i.unit.trim() || "pcs",
-    estimated_cost: Math.max(0, i.estimated_cost),
+    ingredient_name: r.ingredient_name,
+    quantity: r.quantity,
+    unit: r.unit,
+    estimated_cost: priceMap.get(r.ingredient_name.trim().toLowerCase()) ?? 0,
   }));
 
   const { data: itemData, error: itemError } = await supabase
@@ -257,8 +260,17 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput): Prom
     .select("*");
 
   if (itemError) throw new Error(`Failed to create order items: ${itemError.message}`);
-
   const items = (itemData ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>));
+
+  // Mark selected requests as "ordered" and link them to this order
+  const { error: updateError } = await supabase
+    .from("purchase_requests")
+    .update({ status: "ordered", order_id: order.id, updated_at: new Date().toISOString() })
+    .in("id", input.request_ids);
+
+  if (updateError) {
+    console.warn(`Failed to update request statuses: ${updateError.message}`);
+  }
 
   return { ...order, items };
 }
@@ -275,6 +287,16 @@ export async function updatePurchaseOrderStatus(id: string, status: OrderStatus)
 
 export async function deletePurchaseOrder(id: string): Promise<void> {
   const supabase = getSupabaseClient();
+  // Unlink requests that were tied to this order (set back to approved)
+  const { error: unlinkError } = await supabase
+    .from("purchase_requests")
+    .update({ status: "approved", order_id: null, updated_at: new Date().toISOString() })
+    .eq("order_id", id);
+
+  if (unlinkError) {
+    console.warn(`Failed to unlink requests: ${unlinkError.message}`);
+  }
+
   // Items cascade-delete via FK
   const { error } = await supabase
     .from("purchase_orders")

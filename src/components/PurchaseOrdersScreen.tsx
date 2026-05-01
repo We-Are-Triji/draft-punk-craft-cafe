@@ -6,24 +6,20 @@ import {
   PlusCircle,
   Search,
   ShoppingCart,
-  Trash2,
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePurchaseOrders } from "@/hooks/usePurchaseOrders";
-import { useProducts } from "@/hooks/useProducts";
+import { usePurchaseRequests } from "@/hooks/usePurchaseRequests";
+import { useInventory } from "@/hooks/useInventory";
 import {
-  createPurchaseOrder,
+  createPurchaseOrderFromRequests,
   updatePurchaseOrderStatus,
   deletePurchaseOrder,
   type OrderStatus,
 } from "@/lib/purchasingService";
 
 const PAGE_SIZE = 8;
-
-function generateLineId(): string {
-  return `li-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function formatDate(value: string): string {
   const d = new Date(value);
@@ -41,36 +37,11 @@ const statusStyles: Record<OrderStatus, string> = {
   received: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400",
 };
 
-interface FormLineItem {
-  id: string;
-  ingredient_name: string;
-  quantity: number;
-  unit: string;
-  estimated_cost: number;
-}
-
-interface IngredientOption {
-  name: string;
-  unit: string;
-}
-
-function buildIngredientOptions(products: { ingredients: { name: string; unit: string }[] }[]): IngredientOption[] {
-  const map = new Map<string, IngredientOption>();
-  for (const product of products) {
-    for (const ing of product.ingredients) {
-      const key = ing.name.trim().toLowerCase();
-      if (!key) continue;
-      if (!map.has(key)) {
-        map.set(key, { name: ing.name.trim(), unit: ing.unit.trim() || "pcs" });
-      }
-    }
-  }
-  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
 export function PurchaseOrdersScreen() {
-  const { orders, loading, error: loadError, refresh } = usePurchaseOrders();
-  const { products } = useProducts();
+  const { orders, loading, error: loadError, refresh: refreshOrders } = usePurchaseOrders();
+  const { requests, refresh: refreshRequests } = usePurchaseRequests();
+  const { items: inventoryItems } = useInventory();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   const [page, setPage] = useState(1);
@@ -83,17 +54,27 @@ export function PurchaseOrdersScreen() {
   const [supplierName, setSupplierName] = useState("");
   const [expectedDate, setExpectedDate] = useState("");
   const [formNotes, setFormNotes] = useState("");
-  const [lineItems, setLineItems] = useState<FormLineItem[]>([
-    { id: generateLineId(), ingredient_name: "", quantity: 1, unit: "pcs", estimated_cost: 0 },
-  ]);
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
 
-  const ingredientOptions = useMemo(() => buildIngredientOptions(products), [products]);
+  const approvedRequests = useMemo(
+    () => requests.filter((r) => r.status === "approved"),
+    [requests]
+  );
+
+  const priceMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of inventoryItems) {
+      map.set(item.name.trim().toLowerCase(), item.price_amount);
+    }
+    return map;
+  }, [inventoryItems]);
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
+      const q = search.toLowerCase();
       const matchesSearch =
-        o.supplier_name.toLowerCase().includes(search.toLowerCase()) ||
-        o.items.some((i) => i.ingredient_name.toLowerCase().includes(search.toLowerCase()));
+        o.supplier_name.toLowerCase().includes(q) ||
+        o.items.some((i) => i.ingredient_name.toLowerCase().includes(q));
       const matchesStatus = statusFilter === "all" || o.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -106,53 +87,46 @@ export function PurchaseOrdersScreen() {
     setSupplierName("");
     setExpectedDate("");
     setFormNotes("");
-    setLineItems([{ id: generateLineId(), ingredient_name: "", quantity: 1, unit: "pcs", estimated_cost: 0 }]);
+    setSelectedRequestIds(new Set());
   };
 
-  const addLineItem = () => {
-    setLineItems((prev) => [...prev, { id: generateLineId(), ingredient_name: "", quantity: 1, unit: "pcs", estimated_cost: 0 }]);
+  const toggleRequestSelection = (id: string) => {
+    setSelectedRequestIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
-  const removeLineItem = (id: string) => {
-    setLineItems((prev) => (prev.length <= 1 ? prev : prev.filter((li) => li.id !== id)));
+  const toggleAllRequests = () => {
+    if (selectedRequestIds.size === approvedRequests.length) {
+      setSelectedRequestIds(new Set());
+    } else {
+      setSelectedRequestIds(new Set(approvedRequests.map((r) => r.id)));
+    }
   };
 
-  const updateLineItem = (id: string, field: keyof FormLineItem, value: string | number) => {
-    setLineItems((prev) => prev.map((li) => (li.id === id ? { ...li, [field]: value } : li)));
-  };
-
-  const selectLineIngredient = (id: string, ingredientName: string) => {
-    const matched = ingredientOptions.find((o) => o.name === ingredientName);
-    setLineItems((prev) =>
-      prev.map((li) =>
-        li.id === id
-          ? { ...li, ingredient_name: ingredientName, unit: matched?.unit ?? li.unit }
-          : li
-      )
-    );
-  };
+  const selectedTotal = useMemo(() => {
+    return approvedRequests
+      .filter((r) => selectedRequestIds.has(r.id))
+      .reduce((sum, r) => {
+        const price = priceMap.get(r.ingredient_name.trim().toLowerCase()) ?? 0;
+        return sum + price * r.quantity;
+      }, 0);
+  }, [approvedRequests, selectedRequestIds, priceMap]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!supplierName.trim()) return;
-    const validItems = lineItems.filter((li) => li.ingredient_name.trim() && li.quantity > 0);
-    if (validItems.length === 0) return;
-
+    if (!supplierName.trim() || selectedRequestIds.size === 0) return;
     setIsSubmitting(true);
     setActionError(null);
     try {
-      await createPurchaseOrder({
-        supplier_name: supplierName.trim(),
-        expected_date: expectedDate || null,
-        notes: formNotes.trim(),
-        items: validItems.map((li) => ({
-          ingredient_name: li.ingredient_name.trim(),
-          quantity: li.quantity,
-          unit: li.unit.trim() || "pcs",
-          estimated_cost: Math.max(0, li.estimated_cost),
-        })),
-      });
-      await refresh();
+      await createPurchaseOrderFromRequests(
+        { supplier_name: supplierName.trim(), expected_date: expectedDate || null, notes: formNotes.trim(), request_ids: [...selectedRequestIds] },
+        approvedRequests,
+        priceMap
+      );
+      await Promise.all([refreshOrders(), refreshRequests()]);
       resetForm();
       setIsFormOpen(false);
       setPage(1);
@@ -165,12 +139,8 @@ export function PurchaseOrdersScreen() {
 
   const handleStatusChange = async (id: string, status: OrderStatus) => {
     setActionError(null);
-    try {
-      await updatePurchaseOrderStatus(id, status);
-      await refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to update status.");
-    }
+    try { await updatePurchaseOrderStatus(id, status); await refreshOrders(); }
+    catch (err) { setActionError(err instanceof Error ? err.message : "Failed to update status."); }
   };
 
   const handleDelete = async (id: string) => {
@@ -178,10 +148,8 @@ export function PurchaseOrdersScreen() {
     try {
       await deletePurchaseOrder(id);
       if (expandedId === id) setExpandedId(null);
-      await refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete order.");
-    }
+      await Promise.all([refreshOrders(), refreshRequests()]);
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Failed to delete order."); }
   };
 
   const getOrderTotal = (items: { estimated_cost: number; quantity: number }[]): number =>
@@ -194,10 +162,14 @@ export function PurchaseOrdersScreen() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Purchase Orders</h1>
-          <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest font-bold">Track orders to suppliers</p>
+          <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest font-bold">Create orders from approved requests</p>
         </div>
-        <button onClick={() => setIsFormOpen(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md shadow-amber-900/20 hover:from-amber-700 hover:to-amber-600 transition-all">
-          <PlusCircle className="w-4 h-4" /> New Order
+        <button
+          onClick={() => { setIsFormOpen(true); setSelectedRequestIds(new Set()); }}
+          disabled={approvedRequests.length === 0}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md shadow-amber-900/20 hover:from-amber-700 hover:to-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <PlusCircle className="w-4 h-4" /> New Order {approvedRequests.length > 0 && `(${approvedRequests.length} approved)`}
         </button>
       </div>
 
@@ -205,7 +177,13 @@ export function PurchaseOrdersScreen() {
         <div className="rounded-xl border border-red-100 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20 px-4 py-3 text-sm text-red-700 dark:text-red-400">{displayError}</div>
       )}
 
-      {/* New Order Modal */}
+      {approvedRequests.length === 0 && !loading && orders.length === 0 && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          No approved purchase requests yet. Approve requests in the Purchase Requests page first, then create orders here.
+        </div>
+      )}
+
+      {/* New Order Modal — select from approved requests */}
       {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
@@ -222,57 +200,57 @@ export function PurchaseOrdersScreen() {
                 <label className="block text-xs font-semibold text-muted-foreground mb-1">Expected Delivery Date</label>
                 <input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
               </div>
+
+              {/* Select approved requests */}
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <label className="text-xs font-semibold text-muted-foreground">Items</label>
-                  <button type="button" onClick={addLineItem} className="text-xs text-amber-700 dark:text-amber-400 font-semibold hover:underline">+ Add Item</button>
+                  <label className="text-xs font-semibold text-muted-foreground">
+                    Select Approved Requests ({selectedRequestIds.size} of {approvedRequests.length})
+                  </label>
+                  <button type="button" onClick={toggleAllRequests} className="text-xs text-amber-700 dark:text-amber-400 font-semibold hover:underline">
+                    {selectedRequestIds.size === approvedRequests.length ? "Deselect All" : "Select All"}
+                  </button>
                 </div>
-                <div className="grid grid-cols-[1fr_64px_56px_80px_28px] gap-1 mb-1 px-0.5">
-                  <span className="text-[10px] font-semibold text-muted-foreground">Ingredient</span>
-                  <span className="text-[10px] font-semibold text-muted-foreground text-right">Qty</span>
-                  <span className="text-[10px] font-semibold text-muted-foreground">Unit</span>
-                  <span className="text-[10px] font-semibold text-muted-foreground text-right">Cost (₱)</span>
-                  <span />
-                </div>
-                <div className="space-y-2">
-                  {lineItems.map((li) => (
-                    <div key={li.id} className="grid grid-cols-[1fr_64px_56px_80px_28px] gap-2 items-start">
-                      <div className="relative">
-                        <input
-                          type="text"
-                          list={`ingredients-${li.id}`}
-                          value={li.ingredient_name}
-                          onChange={(e) => selectLineIngredient(li.id, e.target.value)}
-                          placeholder="Select or type..."
-                          className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-                        />
-                        <datalist id={`ingredients-${li.id}`}>
-                          {ingredientOptions.map((opt) => (
-                            <option key={opt.name} value={opt.name}>{opt.name} ({opt.unit})</option>
-                          ))}
-                        </datalist>
-                      </div>
-                      <input type="number" value={li.quantity} onChange={(e) => updateLineItem(li.id, "quantity", Number(e.target.value))} min="0.01" step="any" className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
-                      <span className="rounded-lg border border-border bg-muted/40 px-2 py-2 text-xs text-muted-foreground text-center">{li.unit}</span>
-                      <input type="number" value={li.estimated_cost} onChange={(e) => updateLineItem(li.id, "estimated_cost", Number(e.target.value))} min="0" step="0.01" placeholder="0.00" className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-right focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
-                      <button type="button" onClick={() => removeLineItem(li.id)} className="text-red-400 hover:text-red-600 pt-2"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  ))}
-                </div>
+                {approvedRequests.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-3 text-center">No approved requests available.</p>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-border divide-y divide-border/50">
+                    {approvedRequests.map((r) => {
+                      const price = priceMap.get(r.ingredient_name.trim().toLowerCase()) ?? 0;
+                      const isSelected = selectedRequestIds.has(r.id);
+                      return (
+                        <label key={r.id} className={cn("flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors", isSelected ? "bg-amber-50/50 dark:bg-amber-950/10" : "hover:bg-muted/30")}>
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleRequestSelection(r.id)} className="rounded accent-amber-700" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium text-foreground">{r.ingredient_name}</span>
+                            <span className="text-[10px] text-muted-foreground ml-2">{r.quantity} {r.unit}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground tabular-nums">{price > 0 ? formatCurrency(price * r.quantity) : "—"}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {selectedRequestIds.size > 0 && (
+                  <div className="flex justify-end mt-2">
+                    <span className="text-xs font-semibold text-foreground">Est. Total: {formatCurrency(selectedTotal)}</span>
+                  </div>
+                )}
               </div>
+
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1">Notes</label>
                 <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Optional notes..." rows={2} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 resize-none" />
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md hover:from-amber-700 hover:to-amber-600 transition-all disabled:opacity-60">
-                {isSubmitting ? <span className="inline-flex items-center gap-2"><LoaderCircle className="w-4 h-4 animate-spin" /> Creating...</span> : "Create Order"}
+              <button type="submit" disabled={isSubmitting || selectedRequestIds.size === 0} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md hover:from-amber-700 hover:to-amber-600 transition-all disabled:opacity-60">
+                {isSubmitting ? <span className="inline-flex items-center gap-2"><LoaderCircle className="w-4 h-4 animate-spin" /> Creating...</span> : `Create Order (${selectedRequestIds.size} items)`}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* List */}
+      {/* Orders List */}
       <div className="bg-white dark:bg-card rounded-3xl shadow-sm border border-gray-100 dark:border-border p-6">
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
@@ -288,14 +266,12 @@ export function PurchaseOrdersScreen() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <LoaderCircle className="w-5 h-5 animate-spin mr-2" /> Loading orders...
-          </div>
+          <div className="flex items-center justify-center py-16 text-muted-foreground"><LoaderCircle className="w-5 h-5 animate-spin mr-2" /> Loading orders...</div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <ShoppingCart className="w-10 h-10 mb-3 opacity-40" />
             <p className="text-sm">No purchase orders yet.</p>
-            <p className="text-xs mt-1">Click "New Order" to create one.</p>
+            <p className="text-xs mt-1">Approve requests first, then create orders from them.</p>
           </div>
         ) : (
           <>
