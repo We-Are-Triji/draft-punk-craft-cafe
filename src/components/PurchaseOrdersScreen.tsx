@@ -169,7 +169,7 @@ export function PurchaseOrdersScreen() {
           disabled={approvedRequests.length === 0}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md shadow-amber-900/20 hover:from-amber-700 hover:to-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <PlusCircle className="w-4 h-4" /> New Order {approvedRequests.length > 0 && `(${approvedRequests.length} approved)`}
+          <PlusCircle className="w-4 h-4" /> New Order
         </button>
       </div>
 

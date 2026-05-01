@@ -62,23 +62,19 @@ alter table public.purchase_orders enable row level security;
 alter table public.purchase_order_items enable row level security;
 
 -- Allow authenticated users full access
-create policy "Authenticated users can manage purchase requests"
-  on public.purchase_requests for all
-  to authenticated
-  using (true)
-  with check (true);
-
-create policy "Authenticated users can manage purchase orders"
-  on public.purchase_orders for all
-  to authenticated
-  using (true)
-  with check (true);
-
-create policy "Authenticated users can manage purchase order items"
-  on public.purchase_order_items for all
-  to authenticated
-  using (true)
-  with check (true);
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'Authenticated users can manage purchase requests' and tablename = 'purchase_requests') then
+    create policy "Authenticated users can manage purchase requests" on public.purchase_requests for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'Authenticated users can manage purchase orders' and tablename = 'purchase_orders') then
+    create policy "Authenticated users can manage purchase orders" on public.purchase_orders for all to authenticated using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'Authenticated users can manage purchase order items' and tablename = 'purchase_order_items') then
+    create policy "Authenticated users can manage purchase order items" on public.purchase_order_items for all to authenticated using (true) with check (true);
+  end if;
+end
+$$;
 
 -- Enable realtime
 do $$

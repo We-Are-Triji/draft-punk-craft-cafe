@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   PlusCircle,
   Search,
+  ShoppingCart,
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -125,7 +126,6 @@ export function PurchaseRequestsScreen() {
   };
 
   const displayError = actionError ?? loadError;
-  const approvedCount = requests.filter((r) => r.status === "approved").length;
 
   return (
     <div className="space-y-6">
@@ -137,11 +137,6 @@ export function PurchaseRequestsScreen() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {approvedCount > 0 && (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-              {approvedCount} approved — ready for Purchase Order
-            </span>
-          )}
           <button onClick={() => setIsFormOpen(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-800 to-amber-700 text-white text-sm font-semibold shadow-md shadow-amber-900/20 hover:from-amber-700 hover:to-amber-600 transition-all">
             <PlusCircle className="w-4 h-4" /> New Request
           </button>
@@ -246,7 +241,9 @@ export function PurchaseRequestsScreen() {
                       </td>
                       <td className="py-3 px-3 text-center">
                         {r.status === "ordered" ? (
-                          <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase", statusStyles.ordered)}>Ordered</span>
+                          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase", statusStyles.ordered)}>
+                            <ShoppingCart className="w-3 h-3" /> Order Created
+                          </span>
                         ) : (
                           <select value={r.status} onChange={(e) => handleStatusChange(r.id, e.target.value as RequestStatus)} className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border-0 cursor-pointer focus:outline-none", statusStyles[r.status])}>
                             <option value="pending">Pending</option>
