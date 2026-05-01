@@ -4,6 +4,7 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Coffee,
   Receipt,
   HandPlatter,
@@ -11,17 +12,29 @@ import {
   LoaderCircle,
   Sun,
   Moon,
+  ClipboardList,
+  FileText,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type Tab = "dashboard" | "inventory" | "transactions" | "recipes";
+export type Tab =
+  | "dashboard"
+  | "inventory"
+  | "transactions"
+  | "recipes"
+  | "purchasing-orders"
+  | "purchasing-requests";
 
-const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", tab: "dashboard" as const },
-  { icon: Package, label: "Inventory", tab: "inventory" as const },
-  { icon: Receipt, label: "Transactions", tab: "transactions" as const },
-  { icon: HandPlatter, label: "Recipes", tab: "recipes" as const },
+const INVENTORY_GROUP_TABS: Tab[] = [
+  "inventory",
+  "purchasing-orders",
+  "purchasing-requests",
 ];
+
+function isInventoryGroupTab(tab: Tab): boolean {
+  return INVENTORY_GROUP_TABS.includes(tab);
+}
 
 interface SidebarProps {
   activeTab: Tab;
@@ -41,6 +54,31 @@ export function Sidebar({
   onToggleTheme,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [inventoryExpanded, setInventoryExpanded] = useState(
+    isInventoryGroupTab(activeTab)
+  );
+
+  // Auto-expand inventory group when navigating to a sub-tab
+  if (isInventoryGroupTab(activeTab) && !inventoryExpanded) {
+    setInventoryExpanded(true);
+  }
+
+  const handleInventoryGroupClick = () => {
+    if (collapsed) {
+      onTabChange("inventory");
+      return;
+    }
+    if (!inventoryExpanded) {
+      setInventoryExpanded(true);
+      if (!isInventoryGroupTab(activeTab)) {
+        onTabChange("inventory");
+      }
+    } else {
+      setInventoryExpanded(false);
+    }
+  };
+
+  const inventoryGroupActive = isInventoryGroupTab(activeTab);
 
   return (
     <aside
@@ -91,23 +129,129 @@ export function Sidebar({
           </span>
         )}
         {collapsed && <div className="h-2" />}
-        {navItems.map((item) => (
-          <button
-            key={item.tab}
-            onClick={() => onTabChange(item.tab)}
-            title={collapsed ? item.label : undefined}
-            className={cn(
-              "relative flex items-center rounded-xl text-sm font-medium transition-all duration-200",
-              collapsed ? "justify-center p-2.5 mx-auto w-11 h-11" : "gap-3 px-3 py-2.5",
-              activeTab === item.tab
-                ? "bg-gradient-to-r from-amber-800 to-amber-700 text-white shadow-md shadow-amber-900/20"
-                : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+
+        {/* Dashboard */}
+        <button
+          onClick={() => onTabChange("dashboard")}
+          title={collapsed ? "Dashboard" : undefined}
+          className={cn(
+            "relative flex items-center rounded-xl text-sm font-medium transition-all duration-200",
+            collapsed ? "justify-center p-2.5 mx-auto w-11 h-11" : "gap-3 px-3 py-2.5",
+            activeTab === "dashboard"
+              ? "bg-gradient-to-r from-amber-800 to-amber-700 text-white shadow-md shadow-amber-900/20"
+              : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
+        >
+          <LayoutDashboard className={cn("shrink-0", collapsed ? "w-[18px] h-[18px]" : "w-4 h-4")} />
+          {!collapsed && <span>Dashboard</span>}
+        </button>
+
+        {/* Inventory group */}
+        <button
+          onClick={handleInventoryGroupClick}
+          title={collapsed ? "Inventory" : undefined}
+          className={cn(
+            "relative flex items-center rounded-xl text-sm font-medium transition-all duration-200",
+            collapsed ? "justify-center p-2.5 mx-auto w-11 h-11" : "gap-3 px-3 py-2.5",
+            inventoryGroupActive
+              ? "bg-gradient-to-r from-amber-800 to-amber-700 text-white shadow-md shadow-amber-900/20"
+              : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
+        >
+          <Package className={cn("shrink-0", collapsed ? "w-[18px] h-[18px]" : "w-4 h-4")} />
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">Inventory</span>
+              <ChevronDown
+                className={cn(
+                  "w-3.5 h-3.5 shrink-0 transition-transform duration-200",
+                  inventoryExpanded ? "rotate-180" : ""
+                )}
+              />
+            </>
+          )}
+        </button>
+
+        {/* Inventory sub-items */}
+        {!collapsed && inventoryExpanded && (
+          <div className="flex flex-col gap-0.5 ml-4 pl-3 border-l border-border/50">
+            <button
+              onClick={() => onTabChange("inventory")}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg text-xs font-medium px-2.5 py-2 transition-all duration-200",
+                activeTab === "inventory"
+                  ? "bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-400"
+                  : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              )}
+            >
+              <ClipboardList className="w-3.5 h-3.5 shrink-0" />
+              <span>Stock Take</span>
+            </button>
+
+            {!collapsed && (
+              <span className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-2.5 pt-2 pb-1">
+                Purchasing
+              </span>
             )}
-          >
-            <item.icon className={cn("shrink-0", collapsed ? "w-[18px] h-[18px]" : "w-4 h-4")} />
-            {!collapsed && <span>{item.label}</span>}
-          </button>
-        ))}
+
+            <button
+              onClick={() => onTabChange("purchasing-orders")}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg text-xs font-medium px-2.5 py-2 transition-all duration-200",
+                activeTab === "purchasing-orders"
+                  ? "bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-400"
+                  : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              )}
+            >
+              <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
+              <span>Purchase Orders</span>
+            </button>
+            <button
+              onClick={() => onTabChange("purchasing-requests")}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg text-xs font-medium px-2.5 py-2 transition-all duration-200",
+                activeTab === "purchasing-requests"
+                  ? "bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-400"
+                  : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              )}
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />
+              <span>Purchase Requests</span>
+            </button>
+          </div>
+        )}
+
+        {/* Transactions */}
+        <button
+          onClick={() => onTabChange("transactions")}
+          title={collapsed ? "Transactions" : undefined}
+          className={cn(
+            "relative flex items-center rounded-xl text-sm font-medium transition-all duration-200",
+            collapsed ? "justify-center p-2.5 mx-auto w-11 h-11" : "gap-3 px-3 py-2.5",
+            activeTab === "transactions"
+              ? "bg-gradient-to-r from-amber-800 to-amber-700 text-white shadow-md shadow-amber-900/20"
+              : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
+        >
+          <Receipt className={cn("shrink-0", collapsed ? "w-[18px] h-[18px]" : "w-4 h-4")} />
+          {!collapsed && <span>Transactions</span>}
+        </button>
+
+        {/* Recipes */}
+        <button
+          onClick={() => onTabChange("recipes")}
+          title={collapsed ? "Recipes" : undefined}
+          className={cn(
+            "relative flex items-center rounded-xl text-sm font-medium transition-all duration-200",
+            collapsed ? "justify-center p-2.5 mx-auto w-11 h-11" : "gap-3 px-3 py-2.5",
+            activeTab === "recipes"
+              ? "bg-gradient-to-r from-amber-800 to-amber-700 text-white shadow-md shadow-amber-900/20"
+              : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
+        >
+          <HandPlatter className={cn("shrink-0", collapsed ? "w-[18px] h-[18px]" : "w-4 h-4")} />
+          {!collapsed && <span>Recipes</span>}
+        </button>
 
         {/* Theme toggle */}
         <div className="mt-auto pt-3 pb-1">

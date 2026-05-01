@@ -1826,7 +1826,7 @@ export function InventoryScreen({
           <div>
             <h2 className="text-2xl font-bold text-gray-800 dark:text-foreground tracking-tight">Ingredients List</h2>
             <p className="text-xs text-gray-400 dark:text-muted-foreground mt-1 uppercase tracking-widest font-bold">
-              Recipe-based, de-duplicated catalog
+              Stock Take Adjustments
             </p>
           </div>
 

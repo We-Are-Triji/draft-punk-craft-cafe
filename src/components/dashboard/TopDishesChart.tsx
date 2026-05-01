@@ -31,7 +31,7 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
 
   const chartDomainMax = Math.max(
     5,
-    ...data.map((item) => Math.ceil(item.transactions * 1.25))
+    ...data.map((item) => Math.ceil(item.quantity * 1.25))
   );
 
   return (
@@ -39,7 +39,7 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
       <CardHeader>
         <CardTitle className="text-base font-semibold">Top Products</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Most transacted products this week
+          Most sold products this week (by servings)
         </p>
       </CardHeader>
       <CardContent className="flex-1 pt-0">
@@ -85,11 +85,11 @@ export function TopDishesChart({ data, loading }: TopDishesChartProps) {
                   color: isDark ? "oklch(0.985 0 0)" : "#000",
                 }}
                 cursor={{ fill: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)" }}
-                formatter={(value) => [`${value ?? 0} transactions`, "Transactions"]}
+                formatter={(value) => [`${value ?? 0} servings sold`, "Quantity"]}
                 labelStyle={{ color: isDark ? "oklch(0.985 0 0)" : "#000" }}
               />
               <Bar
-                dataKey="transactions"
+                dataKey="quantity"
                 radius={[0, 8, 8, 0]}
                 barSize={20}
                 label={{

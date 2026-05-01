@@ -5,6 +5,8 @@ import { LoginScreen } from "@/components/LoginScreen";
 import { InventoryScreen } from "@/components/InventoryScreen";
 import { RecipesScreen } from "@/components/RecipesScreen";
 import { TransactionsScreen } from "@/components/TransactionsScreen";
+import { PurchaseOrdersScreen } from "@/components/PurchaseOrdersScreen";
+import { PurchaseRequestsScreen } from "@/components/PurchaseRequestsScreen";
 import type { QuickShortcutAction } from "@/components/dashboard/QuickShortcuts";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useTheme } from "@/hooks/useTheme";
@@ -132,6 +134,8 @@ function App() {
           />
         )}
         {activeTab === "recipes" && <RecipesScreen />}
+        {activeTab === "purchasing-orders" && <PurchaseOrdersScreen />}
+        {activeTab === "purchasing-requests" && <PurchaseRequestsScreen />}
       </main>
     </div>
   );
